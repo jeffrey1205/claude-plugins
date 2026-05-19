@@ -14,16 +14,13 @@
 ## 合并 PDF
 
 ```python
-python3 << 'PYEOF'
-try:
-    import fitz
-except ImportError:
-    import pymupdf as fitz
+~/.local/pyoffice/bin/python << 'PYEOF'
+import pymupdf
 
 def merge_pdfs(input_files, output_file):
-    doc_out = fitz.open()
+    doc_out = pymupdf.open()
     for f in input_files:
-        doc_in = fitz.open(f)
+        doc_in = pymupdf.open(f)
         doc_out.insert_pdf(doc_in)
         doc_in.close()
     doc_out.save(output_file)
@@ -42,16 +39,13 @@ PYEOF
 提取指定页面生成新 PDF：
 
 ```python
-python3 << 'PYEOF'
-try:
-    import fitz
-except ImportError:
-    import pymupdf as fitz
+~/.local/pyoffice/bin/python << 'PYEOF'
+import pymupdf
 
 def extract_pages(input_file, output_file, pages):
     """pages: 页码列表，从 1 开始，如 [1, 3, 5]"""
-    doc = fitz.open(input_file)
-    doc_out = fitz.open()
+    doc = pymupdf.open(input_file)
+    doc_out = pymupdf.open()
     for p in pages:
         doc_out.insert_pdf(doc, from_page=p-1, to_page=p-1)
     doc_out.save(output_file)
@@ -69,15 +63,12 @@ PYEOF
 ## 旋转页面
 
 ```python
-python3 << 'PYEOF'
-try:
-    import fitz
-except ImportError:
-    import pymupdf as fitz
+~/.local/pyoffice/bin/python << 'PYEOF'
+import pymupdf
 
 def rotate_pages(input_file, output_file, rotation=90):
     """rotation: 90, 180, 270"""
-    doc = fitz.open(input_file)
+    doc = pymupdf.open(input_file)
     for page in doc:
         page.set_rotation(rotation)
     doc.save(output_file)
@@ -96,15 +87,12 @@ PYEOF
 ### 加密 PDF
 
 ```python
-python3 << 'PYEOF'
-try:
-    import fitz
-except ImportError:
-    import pymupdf as fitz
+~/.local/pyoffice/bin/python << 'PYEOF'
+import pymupdf
 
 def encrypt_pdf(input_file, output_file, user_pw='', owner_pw=''):
-    doc = fitz.open(input_file)
-    doc.save(output_file, encryption=fitz.PDF_ENCRYPT_AES_256,
+    doc = pymupdf.open(input_file)
+    doc.save(output_file, encryption=pymupdf.PDF_ENCRYPT_AES_256,
              owner_pw=owner_pw or 'owner', user_pw=user_pw)
     doc.close()
     print(f'已加密并保存到 {output_file}')
@@ -117,14 +105,11 @@ PYEOF
 ### 解密 PDF（已知密码）
 
 ```python
-python3 << 'PYEOF'
-try:
-    import fitz
-except ImportError:
-    import pymupdf as fitz
+~/.local/pyoffice/bin/python << 'PYEOF'
+import pymupdf
 
 def decrypt_pdf(input_file, output_file, password):
-    doc = fitz.open(input_file)
+    doc = pymupdf.open(input_file)
     if doc.needs_pass:
         doc.authenticate(password)
     doc.save(output_file)

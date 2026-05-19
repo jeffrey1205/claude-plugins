@@ -37,24 +37,8 @@ description: |
 ### 检测脚本
 
 ```bash
-# 检测 uv 虚拟环境中的 Python 库
-~/.local/pyoffice/bin/python -c "import docx, pptx, PIL, cv2, pytesseract; print('uv libs OK')" 2>/dev/null || echo "MISSING: uv python libs"
-
-# 检测系统 Python 库（注意：pymupdf 新旧版本包名不同，兼容两种写法）
-python3 -c "
-try:
-    import fitz
-    print('fitz OK (old PyMuPDF)')
-except ImportError:
-    try:
-        import pymupdf
-        print('pymupdf OK (new PyMuPDF)')
-    except ImportError:
-        print('MISSING: PyMuPDF (neither fitz nor pymupdf)')
-import openpyxl; print('openpyxl OK')
-import xlrd; print('xlrd OK')
-import pandas; print('pandas OK')
-" 2>/dev/null || echo "MISSING: some system python libs"
+# 检测 uv 虚拟环境中的所有 Python 库
+~/.local/pyoffice/bin/python -c "import docx, pptx, PIL, cv2, pytesseract, pymupdf, openpyxl, xlrd, pandas; print('All libs OK')" 2>/dev/null || echo "MISSING: python libs"
 
 # 检测命令行工具
 for cmd in tesseract pdftotext pdfinfo pdfimages antiword catdoc; do
@@ -66,23 +50,15 @@ done
 
 ### Python 环境
 
+所有 Python 库统一安装在 uv 虚拟环境中：
+
 | 环境 | 路径 | 说明 |
 |------|------|------|
-| 系统 Python | `/usr/bin/python3` | apt 包直接可用 |
-| uv 虚拟环境 | `~/.local/pyoffice/bin/python` | 需显式调用 |
+| uv 虚拟环境 | `~/.local/pyoffice/bin/python` | 所有库需显式调用 |
 
 ### 可调用的 Python 库
 
-**系统 Python 直接可用**（`python3 -c "import xxx"`）：
-
-| 库 | 用途 | 示例 |
-|----|------|------|
-| `fitz` / `pymupdf` (PyMuPDF) | PDF 读写、文本提取、页面渲染、合并/拆分/加密 | `import fitz`（旧版）或 `import pymupdf`（新版 1.26+ apt 版） |
-| `openpyxl` | Excel .xlsx 读写、格式化、公式 | `import openpyxl` |
-| `xlrd` | Excel 旧版 .xls 读取 | `import xlrd` |
-| `pandas` | 数据分析、表格导出 | `import pandas as pd` |
-
-**需调用 uv 虚拟环境**（`~/.local/pyoffice/bin/python -c "import xxx"`）：
+**使用 uv 虚拟环境调用**（`~/.local/pyoffice/bin/python -c "import xxx"`）：
 
 | 库 | 用途 | 示例 |
 |----|------|------|
@@ -91,6 +67,10 @@ done
 | `PIL` (pillow) | 图片处理、格式转换、OCR 预处理 | `from PIL import Image` |
 | `cv2` (opencv-headless) | 图像处理、OCR 预处理（二值化、去噪） | `import cv2` |
 | `pytesseract` | OCR 引擎接口 | `import pytesseract` |
+| `pymupdf` (PyMuPDF) | PDF 读写、文本提取、页面渲染、合并/拆分/加密 | `import pymupdf` |
+| `openpyxl` | Excel .xlsx 读写、格式化、公式 | `import openpyxl` |
+| `xlrd` | Excel 旧版 .xls 读取 | `import xlrd` |
+| `pandas` | 数据分析、表格导出 | `import pandas as pd` |
 
 ### 命令行工具
 
@@ -105,8 +85,8 @@ done
 
 ## 注意事项
 
-1. **PyMuPDF 兼容**：旧版 pip 安装用 `import fitz`，新版 apt 安装（1.26+）用 `import pymupdf`。使用 `try/except` 兼容两种写法。
-2. **调用路径**：python-docx / python-pptx / pillow / opencv / pytesseract **必须**使用 `~/.local/pyoffice/bin/python` 调用，系统 python 找不到这些包。
+1. **PyMuPDF 导入**：使用 `import pymupdf`（pip 安装的最新版）。
+2. **调用路径**：所有 Python 库 **必须**使用 `~/.local/pyoffice/bin/python` 调用。
 3. **中文 OCR**：tesseract 已安装 `chi_sim` 语言包，使用时加 `-l chi_sim` 或 `lang='chi_sim'`。
 4. **老版 .doc**：先用 `antiword` 尝试，失败时换 `catdoc`（对 WPS 创建的 .doc 兼容性更好）。
 5. **无 GUI**：opencv 使用的是 `opencv-python-headless`，不支持 `cv2.imshow()` 等需要显示器的操作，用 `cv2.imwrite()` 保存结果。

@@ -24,16 +24,13 @@ pdfinfo file.pdf
 pdftotext file.pdf output.txt
 ```
 
-### 使用 PyMuPDF 提取（系统 python）
+### 使用 PyMuPDF 提取
 
 ```bash
-python3 << 'PYEOF'
-try:
-    import fitz
-except ImportError:
-    import pymupdf as fitz
+~/.local/pyoffice/bin/python << 'PYEOF'
+import pymupdf
 
-doc = fitz.open('file.pdf')
+doc = pymupdf.open('file.pdf')
 print(f'页数: {len(doc)}')
 
 # 先试读第一页，判断是否有文本
@@ -98,13 +95,10 @@ text = page.get_text("text", flags=pymupdf.TEXT_DEHYPHENATE)  # 去除连字符�
 
 ```bash
 # 渲染 PDF 页面为图片
-python3 << 'PYEOF'
-try:
-    import fitz
-except ImportError:
-    import pymupdf as fitz
+~/.local/pyoffice/bin/python << 'PYEOF'
+import pymupdf
 
-doc = fitz.open('file.pdf')
+doc = pymupdf.open('file.pdf')
 page = doc[0]  # 第 1 页，索引从 0 开始
 pix = page.get_pixmap(dpi=200)
 pix.save('/tmp/ocr_page.png')
@@ -142,15 +136,12 @@ cat output.txt
 ### 批量 OCR 全部页面（含混合型 PDF）
 
 ```python
-python3 << 'PYEOF'
+~/.local/pyoffice/bin/python << 'PYEOF'
 import subprocess
 import os
-try:
-    import fitz
-except ImportError:
-    import pymupdf as fitz
+import pymupdf
 
-doc = fitz.open('file.pdf')
+doc = pymupdf.open('file.pdf')
 os.makedirs('/tmp/ocr_pages', exist_ok=True)
 all_text = []
 
@@ -202,14 +193,11 @@ pdfimages -png file.pdf pdf_images/image
 ### 使用 PyMuPDF 提取
 
 ```bash
-python3 << 'PYEOF'
-try:
-    import fitz
-except ImportError:
-    import pymupdf as fitz
+~/.local/pyoffice/bin/python << 'PYEOF'
+import pymupdf
 import os
 
-doc = fitz.open('file.pdf')
+doc = pymupdf.open('file.pdf')
 os.makedirs('pdf_images', exist_ok=True)
 img_count = 0
 
@@ -219,9 +207,9 @@ for page_num in range(len(doc)):
     img_count += len(images)
     for img_index, img in enumerate(images):
         xref = img[0]
-        pix = fitz.Pixmap(doc, xref)
+        pix = pymupdf.Pixmap(doc, xref)
         if pix.n - pix.alpha > 3:  # CMYK 转 RGB
-            pix = fitz.Pixmap(fitz.csRGB, pix)
+            pix = pymupdf.Pixmap(pymupdf.csRGB, pix)
         pix.save(f'pdf_images/page{page_num+1}_img{img_index}.png')
         print(f'提取: page{page_num+1}_img{img_index}.png ({pix.width}x{pix.height})')
 
@@ -230,7 +218,7 @@ print(f'共提取 {img_count} 张图片')
 PYEOF
 ```
 
-> **注意**：`pdfimages` 是命令行工具（poppler-utils 的一部分），适合快速提取。PyMuPDF 方案可在代码中精确控制输出格式和路径。
+> **注意**：`pdfimages` 是命令行工具(poppler-utils 的一部分)，适合快速提取。PyMuPDF 方案可在代码中精确控制输出格式和路径。
 
 ---
 

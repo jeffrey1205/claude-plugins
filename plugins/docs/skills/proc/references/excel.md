@@ -12,10 +12,10 @@
 
 ## 读取 .xlsx
 
-### 使用 openpyxl（系统 python）
+### 使用 openpyxl
 
 ```bash
-python3 -c "
+~/.local/pyoffice/bin/python -c "
 import openpyxl
 wb = openpyxl.load_workbook('file.xlsx')
 ws = wb.active
@@ -27,7 +27,7 @@ for row in ws.iter_rows(values_only=True):
 ### 使用 pandas
 
 ```bash
-python3 -c "
+~/.local/pyoffice/bin/python -c "
 import pandas as pd
 df = pd.read_excel('file.xlsx')
 print(df.head())
@@ -39,7 +39,7 @@ print(df.head())
 ## 读取 .xls（老版 Excel）
 
 ```bash
-python3 -c "
+~/.local/pyoffice/bin/python -c "
 import xlrd
 wb = xlrd.open_workbook('file.xls')
 ws = wb.sheet_by_index(0)
@@ -54,7 +54,7 @@ for row in range(ws.nrows):
 ## 编辑/创建 .xlsx
 
 ```bash
-python3 << 'PYEOF'
+~/.local/pyoffice/bin/python << 'PYEOF'
 import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
@@ -131,7 +131,7 @@ PYEOF
 
 ```bash
 # 检查公式错误
-python3 -c "
+~/.local/pyoffice/bin/python -c "
 import openpyxl
 wb = openpyxl.load_workbook('report.xlsx')
 for ws in wb.worksheets:
