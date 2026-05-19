@@ -26,6 +26,10 @@
                 "hooks": [
                     {
                         "type": "command",
+                        "command": "node ../scripts/patch-yaml.js"
+                    },
+                    {
+                        "type": "command",
                         "command": "serena-hooks activate --client=claude-code"
                     }
                 ]
