@@ -16,6 +16,7 @@ uv venv ~/.local/pyoffice --python python3
 
 # 安装所有文档处理相关的 Python 库
 uv pip install --upgrade --python ~/.local/pyoffice/bin/python --no-cache --link-mode=copy \
+    -i https://pypi.tuna.tsinghua.edu.cn/simple \
     python-docx python-pptx pillow opencv-python-headless pytesseract \
     pymupdf openpyxl xlrd pandas
 ```
