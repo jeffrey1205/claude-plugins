@@ -6,7 +6,6 @@ const { execSync } = require('child_process');
 // 支持的语言服务器列表
 const LANGUAGE_SERVERS = [
     { name: 'cpp', command: 'clangd' },
-    { name: 'python', command: 'pyright' },
     { name: 'bash', command: 'bash-language-server' },
     { name: 'typescript', command: 'typescript-language-server' }
 ];
