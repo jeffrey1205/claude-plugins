@@ -9,11 +9,11 @@
 先将本仓库添加为插件市场：
 
 ```bash
-/plugin marketplace add jeffrey1205/cc-hub
+/plugin marketplace add jeffrey1205/claude-plugins
 
-/plugin install cc-hub/serena
+/plugin install serena@cc-hub
 
-/plugin install cc-hub/docs
+/plugin install docs@cc-hub
 ```
 
 ## 插件列表
