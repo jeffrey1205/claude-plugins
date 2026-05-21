@@ -1,0 +1,44 @@
+{
+  "skill_name": "performance-review",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "帮我分析一下当前仓库里的 gateway 服务为什么小包场景 PPS 上不去。现在线上设备 CPU 很高，但程序只能在目标设备跑，开发机没法直接复现。我可以提供 PID，也可以在设备上执行你给的低扰动脚本，把 /proc 和网卡统计贴回来。先根据代码做第一轮判断，并告诉我下一步采哪些数据最有价值。",
+      "expected_output": "应触发 performance-review skill，先确认代码范围和环境约束，进行静态性能分析，输出带置信度的首轮判断，并优先建议低扰动采集方式如 baseline/network 脚本，而不是直接要求 perf 或本地压测。",
+      "files": [],
+      "expectations": [
+        "输出先确认或复述当前问题范围，包括 gateway、小包 PPS 或目标环境限制中的至少两个关键点。",
+        "在没有运行时数据的前提下，先给代码层面的首轮判断，而不是直接要求本地复现或立即下最终结论。",
+        "明确建议低扰动的下一步采集方式，例如 baseline、network 脚本或 /proc、/sys、网卡统计。",
+        "提到需要 PID、环境约束、网卡/中断/softnet 或流量模型中的至少一类补充信息。",
+        "不会把 perf、strace、valgrind 或本地压测作为默认第一步。"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "这个 Go 网络服务线上 CPU 打满，偶发时延尖刺。我现在只能拿到目标机器上的 pprof、goroutine dump 和 /proc 信息，不能在开发机重新跑流量。请先看代码里有没有明显的锁竞争、goroutine 泄漏或者热路径分配问题，再告诉我应该优先看哪些 profile。",
+      "expected_output": "应触发 performance-review skill，识别 Go 场景，结合代码静态分析和 Go profiling 路径，优先建议阅读 go-profiler 相关方式，输出候选瓶颈和需要的下一步证据。",
+      "files": [],
+      "expectations": [
+        "识别这是 Go 服务性能问题，并围绕 pprof、goroutine dump、/proc 或 Go 运行时证据组织建议。",
+        "首轮分析应提到锁竞争、goroutine 泄漏、热路径分配、GC、阻塞 profile、mutex profile 中的至少两项。",
+        "明确给出优先查看的 profile 或证据顺序，而不是泛泛地说“看下性能”。",
+        "承认当前约束是不能在开发机重跑流量，并避免要求本地复现。",
+        "输出内容应把静态分析和运行时证据结合起来，而不是只给 Go 通用调优建议。"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "我们有个 Python 网关进程内存一直缓慢上涨，跑在产品环境里，不能停服务也不能在本地复现。我可以去目标机器执行 shell 脚本，也能贴回 tracemalloc 或 /proc 的结果。你先从代码角度帮我看可能有哪些无界缓存、对象滞留或者 asyncio 用法问题，并给我一个尽量低扰动的排查顺序。",
+      "expected_output": "应触发 performance-review skill，识别 Python 内存问题，先做静态分析，再给出低扰动的排查顺序，优先 /proc 或轻量 Python 取证，再视情况升级到 tracemalloc/py-spy。",
+      "files": [],
+      "expectations": [
+        "识别这是 Python 进程的线上内存增长问题，并结合产品环境限制给建议。",
+        "首轮分析应提到无界缓存、对象滞留、引用持有、asyncio 阻塞或任务堆积中的至少两项可能原因。",
+        "明确给出低扰动排查顺序，优先 /proc、轻量脚本或现有运行信息，再决定是否升级到 tracemalloc 或 py-spy。",
+        "不会建议停服务、本地复现或默认使用高扰动分析方式。",
+        "输出应包含下一步希望用户回传的关键证据，而不是只给概念解释。"
+      ]
+    }
+  ]
+}

@@ -31,6 +31,22 @@
         "excel",
         "ppt"
       ]
+    },
+    {
+      "name": "coder",
+      "description": "面向 C(含 kernel)/Go/Python 后端工程师的开发工具集，包含性能分析、代码审查等 Skill，适用于网络设备（fw、ids、gap、gateway）等场景。",
+      "category": "development",
+      "source": "./plugins/coder",
+      "homepage": "https://github.com/jeffrey1205/claude-plugins",
+      "keywords": [
+        "skill",
+        "performance",
+        "c",
+        "golang",
+        "python",
+        "network",
+        "profiling"
+      ]
     }
   ]
 }
