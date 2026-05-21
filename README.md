@@ -12,7 +12,7 @@
 /plugin marketplace add jeffrey1205/claude-plugins
 
 /plugin install serena@cc-hub
-
+/plugin install coder@cc-hub
 /plugin install docs@cc-hub
 ```
 
@@ -21,6 +21,7 @@
 | 插件名 | 类型 | 描述 |
 |--------|------|------|
 | [serena](./plugins/serena) | MCP Server | 语义代码分析 MCP 服务器，提供智能代码理解、重构建议和代码库导航 |
+| [coder](./plugins/coder) | Skill | 面向 C/Go/Python 后端工程师的性能分析与代码审查工具集，覆盖 CPU、内存、吞吐/时延、定时任务等维度，适配网络设备（fw/ids/gap/gateway）场景 |
 | [docs](./plugins/docs) | Skill | 面向直接处理文档与扫描件的工具集：支持 Word、PowerPoint、PDF、Excel、图片 OCR 等场景 |
 
 ## 前置依赖
@@ -50,13 +51,23 @@ uv tool upgrade serena-agent
     │   ├── .mcp.json         # MCP 服务器配置
     │   └── hooks/
     │       └── hooks.json    # Hook 配置
-    └── docs/
+    ├── docs/
+    │   ├── .claude-plugin/
+    │   │   └── plugin.json   # 插件清单文件
+    │   └── skills/
+    │       └── proc/
+    │           ├── SKILL.md      # 技能指引
+    │           └── references/   # 参考文档
+    └── coder/
         ├── .claude-plugin/
         │   └── plugin.json   # 插件清单文件
         └── skills/
-            └── proc/
-                ├── SKILL.md      # 技能指引
-                └── references/   # 参考文档
+            └── performance-review/
+                ├── SKILL.md      # 性能分析技能指引
+                ├── evals.json    # 评测配置
+                ├── evals/        # 评测用例
+                ├── references/   # 参考文档
+                └── scripts/      # 采集脚本
 ```
 
 ## 添加新插件

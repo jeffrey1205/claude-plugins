@@ -207,27 +207,6 @@ cat /proc/net/dev
 - RX dropped / TX dropped
 - RX overruns / TX overruns
 
-### /proc/net/softnet_stat
-
-```bash
-cat /proc/net/softnet_stat
-```
-
-每行对应一个 CPU，字段：
-1. 已处理包数
-2. dropped（队列满丢包）
-3. time_squeeze（处理时间不足）
-
-### /proc/interrupts
-
-```bash
-cat /proc/interrupts
-```
-
-中断分布，检查：
-- 是否集中在少数 CPU
-- 网卡中断是否均匀分布
-
 ---
 
 ## 内存分析
@@ -265,6 +244,194 @@ ms_print massif.out.<pid>
 gcc -fsanitize=address -g your_program.c
 
 # 检测：内存泄漏、越界、use-after-free
+```
+
+---
+
+## 内核模块专项分析
+
+内核模块无法使用 `perf -p <pid>` 直接采样，需要专项工具。
+
+### 内核内存分析
+
+#### /proc/slabinfo
+
+```bash
+# 查看 slab 分配器统计
+cat /proc/slabinfo
+
+# 关注字段：
+# - objsize: 对象大小
+# - objperslab: 每个 slab 的对象数
+# - objects: 总对象数
+# - objactive: 活跃对象数
+
+# 查看特定 slab（如网络相关）
+cat /proc/slabinfo | grep -E "skb|tcp|udp|conntrack"
+```
+
+#### kmalloc/vmalloc 区别
+
+| 分配类型 | 特点 | 适用场景 |
+|----------|------|----------|
+| kmalloc | 物理连续，小对象 (< 4KB) | skb、结构体、DMA |
+| vmalloc | 虚拟连续，大对象 | 大缓冲区、映射用户空间 |
+| __get_free_pages | 物理连续，多页 | DMA、大块连续内存 |
+
+```bash
+# 查看 vmalloc 使用
+cat /proc/vmallocinfo
+
+# 关注：
+# - 地址范围
+# - 调用者（who分配）
+# - 大小
+```
+
+#### 内核内存泄漏排查
+
+```bash
+# 方法1：slab 统计对比（低扰动）
+cat /proc/slabinfo > slab_before.txt
+# 运行一段时间后
+cat /proc/slabinfo > slab_after.txt
+diff slab_before.txt slab_after.txt
+
+# 方法2：kmalloc 跟踪（需要 ftrace）
+echo 1 > /sys/kernel/debug/tracing/events/kmem/kmalloc/enable
+echo 1 > /sys/kernel/debug/tracing/events/kmem/kfree/enable
+cat /sys/kernel/debug/tracing/trace_pipe
+
+# 方法3：使用 kmemleak（需内核启用 CONFIG_DEBUG_KMEMLEAK）
+echo scan > /sys/kernel/debug/kmemleak
+cat /sys/kernel/debug/kmemleak
+```
+
+---
+
+### 内核锁分析
+
+#### spinlock 调试
+
+```bash
+# 查看 spinlock 统计（需内核启用 CONFIG_LOCK_STAT）
+cat /proc/lock_stat
+
+# 关注：
+# - wait_time_total: 总等待时间
+# - wait_time_max: 最大等待时间
+# - acquisitions: 获取次数
+# - contentions: 冲突次数
+```
+
+常见 spinlock 问题：
+- 热路径中持有 spinlock 时间过长
+- spinlock 与睡眠操作混用（会死锁）
+- 多核竞争同一 spinlock
+
+```c
+// 问题：spinlock 临界区过长
+spin_lock(&lock);
+for (i = 0; i < 10000; i++) {  // 长循环
+    process_packet(&pkts[i]);
+}
+spin_unlock(&lock);
+
+// 修复：缩短临界区（per-packet 加锁）
+for (i = 0; i < 10000; i++) {
+    spin_lock(&lock);
+    process_packet(&pkts[i]);
+    spin_unlock(&lock);
+}
+
+// 或修复：使用 per-CPU 锁（需先获取当前 CPU）
+int cpu = smp_processor_id();  // 或在进程上下文用 get_cpu()
+spin_lock(&per_cpu_lock[cpu]);
+process_packet(&pkts[i]);
+spin_unlock(&per_cpu_lock[cpu]);
+```
+
+#### mutex 调试
+
+```bash
+# 查看 mutex 统计（需内核启用 CONFIG_LOCK_STAT）
+cat /proc/lock_stat | grep mutex
+
+# 使用 ftrace 跟踪 mutex
+echo 1 > /sys/kernel/debug/tracing/events/lock/lock_acquire/enable
+echo 1 > /sys/kernel/debug/tracing/events/lock/lock_release/enable
+cat /sys/kernel/debug/tracing/trace_pipe
+```
+
+#### rwlock 调试
+
+读写锁问题主要在写者阻塞读者：
+- 写者持有锁时间过长，读者排队
+- 读者过多，写者无法获取锁
+
+```bash
+# 查看 rwlock 统计
+cat /proc/lock_stat | grep rwlock
+```
+
+#### ftrace 锁分析
+
+```bash
+# 跟踪锁等待时间
+echo 1 > /sys/kernel/debug/tracing/events/lock/lock_contention_begin/enable
+echo 1 > /sys/kernel/debug/tracing/events/lock/lock_contention_end/enable
+cat /sys/kernel/debug/tracing/trace_pipe
+
+# 输出格式：
+# lock_contention_begin: lock=0xffff... type=spinlock
+# lock_contention_end: wait_time=12345678 ns
+```
+
+---
+
+### 内核模块 perf 分析
+
+```bash
+# 采样内核整体（不是特定模块）
+perf record -a -g -e cpu-cycles -- sleep 10
+
+# 采样特定内核函数
+perf record -a -g -e cpu-cycles --call-graph dwarf \
+    --filter='func:your_module_function' -- sleep 10
+
+# 查看内核符号
+perf report --stdio --sort symbol,dso | grep your_module
+
+# 内核火焰图
+perf script | stackcollapse-perf.pl | flamegraph.pl --color=kernel > kernel.svg
+```
+
+---
+
+### 内核瓶颈定位流程
+
+#### softirq 占用高
+
+> 网络软中断分析（softirq、中断分布、队列积压）见 `network-gateway.md`
+
+#### 内核 CPU 高
+
+```
+1. perf top -a 看内核热点符号
+2. cat /proc/slabinfo 检查 slab 使用
+3. cat /proc/lock_stat 检查锁竞争
+4. ftrace 跟踪热点函数调用频率
+5. 检查：spinlock 临界区、kmalloc 频率、软中断处理
+```
+
+#### 内核内存增长
+
+```
+1. cat /proc/slabinfo 定时采样，对比变化
+2. cat /proc/vmallocinfo 检查 vmalloc 使用
+3. kmemleak 检查泄漏（如可用）
+4. ftrace 跟踪 kmalloc/kfree
+5. 检查：skb 泄漏、结构体未释放、定时任务累积
 ```
 
 ---

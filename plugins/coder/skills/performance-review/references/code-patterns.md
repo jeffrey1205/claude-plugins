@@ -862,6 +862,86 @@ def _load_config_sync():
 
 ---
 
+### [中] Python 定时任务干扰主路径
+
+**类别**: 调度 / CPU
+**现象**: 定时任务（统计上报、规则刷新、会话清理、健康检查）抢占主线程 CPU 或阻塞 asyncio 事件循环
+**检测**: 搜索 `time.sleep`、`threading.Timer`、`schedule`、`APScheduler`、`asyncio.create_task` + `while True`、`celery beat`
+
+```python
+# 问题1：定时器用 sleep 阻塞主线程
+def stats_report():
+    while True:
+        report_stats()   # 同步操作，可能阻塞主线程
+        time.sleep(10)   # 固定间隔，可能与业务线程竞争
+
+threading.Thread(target=stats_report, daemon=True).start()
+```
+
+```python
+# 问题2：asyncio 中用 time.sleep 阻塞事件循环
+async def periodic_cleanup():
+    while True:
+        cleanup_sessions()  # 同步操作！阻塞事件循环
+        time.sleep(60)      # 同步 sleep！阻塞事件循环
+
+asyncio.create_task(periodic_cleanup())
+```
+
+```python
+# 修复1：使用独立线程执行后台任务
+import threading
+
+def stats_report():
+    while True:
+        report_stats()
+        time.sleep(10)
+
+# 使用独立线程，不占用主线程
+t = threading.Thread(target=stats_report, daemon=True, name="stats-report")
+t.start()
+```
+
+```python
+# 修复2：asyncio 中使用 asyncio.sleep 而非 time.sleep
+async def periodic_cleanup():
+    while True:
+        await cleanup_sessions_async()  # 异步操作
+        await asyncio.sleep(60)          # 非阻塞 sleep
+
+asyncio.create_task(periodic_cleanup())
+```
+
+```python
+# 修复3：使用 sched 模块的定时器（需在独立线程中运行）
+import sched
+import time
+import threading
+
+def run_periodic_task(interval, func):
+    """在独立线程中运行定时任务"""
+    scheduler = sched.scheduler(time.time, time.sleep)
+
+    def _run():
+        func()
+        scheduler.enter(interval, 1, _run)
+
+    scheduler.enter(interval, 1, _run)
+    scheduler.run()  # 阻塞，因此必须在独立线程中调用
+
+# 启动定时任务线程
+t = threading.Thread(target=run_periodic_task, args=(10, report_stats),
+                     daemon=True, name="periodic-task")
+t.start()
+```
+
+**网络设备场景特别注意**：
+- 定时任务如规则同步、签名更新、会话清理，不能和数据面共享 CPU 核
+- Python 服务做控制面时，定时任务应避免同步 IO、避免占用事件循环
+- 如果定时任务需要遍历大量会话表/规则表，应分批处理而非一次性全量扫描
+
+---
+
 ## 网络设备专项
 
 ### [高] 控制面干扰数据面

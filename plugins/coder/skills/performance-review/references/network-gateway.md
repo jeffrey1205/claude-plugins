@@ -181,10 +181,19 @@ echo 32768 > /proc/sys/net/core/rps_sock_flow_entries
 # 内核启动参数（需重启）
 isolcpus=2-N
 
-# 或运行时调整
-# 将系统中断绑定到控制面 CPU
-for irq in /proc/irq/*/smp_affinity; do
-    echo 03 > $irq  # CPU 0-1
+# 或运行时调整：只将系统中断绑定到控制面 CPU（排除网卡中断）
+for irq_dir in /proc/irq/*/; do
+    irq_num=$(basename "$irq_dir")
+    # 检查是否为网卡中断（通过 actions 文件）
+    if [ -f "$irq_dir/actions" ]; then
+        actions=$(cat "$irq_dir/actions")
+        # 排除网卡中断，网卡中断应绑定到数据面 CPU
+        if echo "$actions" | grep -q -E "(eth|ixgbe|i40e|mlx)"; then
+            continue
+        fi
+    fi
+    # 绑定系统中断到控制面 CPU（如 CPU 0-1）
+    echo 03 > "$irq_dir/smp_affinity" 2>/dev/null
 done
 ```
 
