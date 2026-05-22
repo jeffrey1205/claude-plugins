@@ -14,6 +14,7 @@
 /plugin install serena@cc-hub
 /plugin install coder@cc-hub
 /plugin install docs@cc-hub
+/plugin install html-lsp@cc-hub
 ```
 
 ## 插件列表
@@ -23,6 +24,7 @@
 | [serena](./plugins/serena) | MCP Server | 语义代码分析 MCP 服务器，提供智能代码理解、重构建议和代码库导航 |
 | [coder](./plugins/coder) | Skill | 面向 C/Go/Python 后端工程师的性能分析与代码审查工具集，覆盖 CPU、内存、吞吐/时延、定时任务等维度，适配网络设备（fw/ids/gap/gateway）场景 |
 | [docs](./plugins/docs) | Skill | 面向直接处理文档与扫描件的工具集：支持 Word、PowerPoint、PDF、Excel、图片 OCR 等场景 |
+| [html-lsp](./plugins/html-lsp) | LSP | HTML/CSS/ESLint 语言服务器集成，提供前端开发时的语法检查、代码补全和实时 lint 诊断 |
 
 ## 前置依赖
 
@@ -71,6 +73,10 @@ uv tool upgrade serena-agent
             └── codebase-explainer/
                 ├── SKILL.md      # 代码理解技能指引
                 └── references/   # 参考文档
+    └── html-lsp/
+        ├── .claude-plugin/
+        │   └── plugin.json   # 插件清单文件
+        └── .lsp.json         # LSP 服务器配置
 ```
 
 ## 添加新插件

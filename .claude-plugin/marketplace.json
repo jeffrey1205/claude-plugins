@@ -47,6 +47,21 @@
         "network",
         "profiling"
       ]
+    },
+    {
+      "name": "html-lsp",
+      "description": "HTML/CSS/ESLint 语言服务器集成，提供前端开发时的语法检查、代码补全和实时 lint 诊断能力。",
+      "category": "development",
+      "source": "./plugins/html-lsp",
+      "homepage": "https://github.com/jeffrey1205/claude-plugins",
+      "keywords": [
+        "lsp",
+        "html",
+        "css",
+        "eslint",
+        "language-server",
+        "frontend"
+      ]
     }
   ]
 }

@@ -1,15 +1,17 @@
 {
-  "serena": {
-	"type": "stdio",
-	"command": "serena",
-	"args": [
-		"start-mcp-server",
-		"--context",
-		"claude-code",
-		"--open-web-dashboard",
-		"false",
-		"--project-from-cwd"
-	],
-	"env": {}
+  "mcpServers": {
+    "serena": {
+      "type": "stdio",
+      "command": "serena",
+      "args": [
+        "start-mcp-server",
+        "--context",
+        "claude-code",
+        "--open-web-dashboard",
+        "false",
+        "--project-from-cwd"
+      ],
+      "env": {}
+    }
   }
 }

@@ -1,0 +1,12 @@
+{
+  "name": "html-lsp",
+  "version": "0.1.0",
+  "description": "HTML, CSS, and ESLint language servers from VS Code",
+  "author": {
+    "name": "Piebald LLC",
+    "email": "support@piebald.ai"
+  },
+  "repository": "https://github.com/zed-industries/vscode-langservers-extracted",
+  "license": "MIT",
+  "keywords": ["html", "css", "eslint", "lsp", "language-server", "vscode"]
+}
