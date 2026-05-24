@@ -47,7 +47,8 @@ def build_progress_bar(pct, ctx_size=None):
     return f"{GREEN}{bar} {pct_display}{RESET}"
 
 
-def get_git_branch(session_id, cache_max_age=5):
+def get_git_info(session_id, cache_max_age=5):
+    """获取 Git 分支和状态，使用缓存"""
     cache_file = f"/tmp/statusline-git-cache-{session_id}"
 
     # 检查缓存是否有效
@@ -55,22 +56,35 @@ def get_git_branch(session_id, cache_max_age=5):
         mtime = os.path.getmtime(cache_file)
         if time.time() - mtime <= cache_max_age:
             with open(cache_file) as f:
-                return f.read().strip()
-    except OSError:
+                return json.load(f)
+    except (OSError, json.JSONDecodeError):
         pass
 
-    # 单次 git 命令获取分支
+    result = {'branch': '', 'staged': 0, 'modified': 0}
+
+    # 单次 git status 获取所有信息
     try:
-        branch = subprocess.check_output(
-            ['git', 'symbolic-ref', '--short', 'HEAD'],
+        output = subprocess.check_output(
+            ['git', 'status', '--porcelain', '-b'],
             text=True, stderr=subprocess.DEVNULL
-        ).strip()
+        ).strip().split('\n')
+
+        for line in output:
+            if line.startswith('## '):
+                result['branch'] = line[3:].split('...')[0]
+            elif line:
+                code = line[:2]
+                # X 为暂存区状态，Y 为工作区状态
+                if code[0] != ' ' and code[0] != '?':
+                    result['staged'] += 1
+                if code[1] != ' ':
+                    result['modified'] += 1
     except Exception:
-        branch = ''
+        pass
 
     with open(cache_file, 'w') as f:
-        f.write(branch)
-    return branch
+        json.dump(result, f)
+    return result
 
 
 def get_directory(data, max_levels=2):
@@ -92,7 +106,7 @@ def get_duration(data):
     duration_ms = data.get('cost', {}).get('total_duration_ms', 0) or 0
     duration_sec = duration_ms // 1000
     mins, secs = duration_sec // 60, duration_sec % 60
-    return f"{MAGENTA}{mins}m{secs}s{RESET}"
+    return f"{MAGENTA}{mins}m {secs}s{RESET}"
 
 
 def get_model_short(data):
@@ -107,25 +121,36 @@ def build_statusline(data):
     ctx_bar = build_progress_bar(ctx_pct, ctx_size=ctx_size)
     model = get_model_short(data)
     directory = get_directory(data)
-    branch = get_git_branch(session_id)
+    git_info = get_git_info(session_id)
     effort = data.get('effort', {}).get('level', '')
     tokens = get_token_display(data)
     duration = get_duration(data)
 
-    parts = []
+    # 第一行：模型、上下文、目录、Git
+    line1_parts = []
     if model:
-        parts.append(model)
-    parts.append(ctx_bar)
+        line1_parts.append(model)
+    line1_parts.append(ctx_bar)
     if directory:
-        parts.append(f"{BLUE}{directory}{RESET}")
-    if branch:
-        parts.append(f"{CYAN}{branch}{RESET}")
-    if effort:
-        parts.append(f"{YELLOW}{effort}{RESET}")
-    parts.append(tokens)
-    parts.append(duration)
+        line1_parts.append(f"{BLUE}{directory}{RESET}")
+    if git_info['branch']:
+        git_str = f"{CYAN}{git_info['branch']}{RESET}"
+        if git_info['staged'] > 0:
+            git_str += f" {GREEN}+{git_info['staged']}{RESET}"
+        if git_info['modified'] > 0:
+            git_str += f" {YELLOW}~{git_info['modified']}{RESET}"
+        line1_parts.append(git_str)
 
-    return ' | '.join(parts)
+    # 第二行：effort、token、duration
+    line2_parts = []
+    if effort:
+        line2_parts.append(f"{YELLOW}effort: {effort}{RESET}")
+    line2_parts.append(tokens)
+    line2_parts.append(duration)
+
+    line1 = ' | '.join(line1_parts)
+    line2 = ' | '.join(line2_parts)
+    return f"{line1}\n{line2}"
 
 
 def main():

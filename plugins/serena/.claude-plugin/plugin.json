@@ -6,5 +6,6 @@
     "name": "Oraios"
   },
   "homepage": "https://github.com/jeffrey1205/claude-plugins",
-  "license": "MIT"
+  "license": "MIT",
+  "commands": ["./commands/setup.md"]
 }
