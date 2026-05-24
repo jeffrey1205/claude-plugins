@@ -62,6 +62,18 @@
         "language-server",
         "frontend"
       ]
+    },
+    {
+      "name": "statusline",
+      "description": "自适应终端宽度的状态行插件，显示上下文窗口、Git、Token、Effort 等信息。",
+      "category": "productivity",
+      "source": "./plugins/statusline",
+      "homepage": "https://github.com/jeffrey1205/claude-plugins",
+      "keywords": [
+        "statusline",
+        "ui",
+        "context"
+      ]
     }
   ]
 }
