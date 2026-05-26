@@ -1,0 +1,34 @@
+# 项目自定义术语表
+
+在此文件中添加你的项目专属术语。翻译时这些术语将保留英文不翻译。
+
+## 格式
+
+```markdown
+## 分类名
+- 术语1
+- 术语2
+```
+
+## 示例
+
+```markdown
+## 产品名称（保留英文）
+- CloudGuard
+- ThreatShield Pro
+- Aegis Platform
+
+## 内部系统
+- SkyNet System
+- DataHub
+
+## 特定缩写
+- CTI (Cyber Threat Intelligence)
+- SOAR (Security Orchestration, Automation and Response)
+```
+
+## 使用说明
+
+1. 在此文件中添加需要保留的术语
+2. 每行一个术语
+3. 翻译时 Skill 会自动读取 `references/terms.md` 并保护这些术语
