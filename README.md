@@ -26,7 +26,7 @@
 |--------|------|------|
 | [serena](./plugins/serena) | MCP Server | 语义代码分析 MCP 服务器，提供智能代码理解、重构建议和代码库导航 |
 | [coder](./plugins/coder) | Skill + Command | 面向 C/Go/Python 后端工程师的性能分析与代码审查工具集，覆盖 CPU、内存、吞吐/时延、定时任务等维度，适配网络设备（fw/ids/gap/gateway）场景；新增 `/coder:lsp-setup` 命令用于安装语言服务器 |
-| [docs](./plugins/docs) | Skill | 面向直接处理文档与扫描件的工具集：支持 Word、PowerPoint、PDF、Excel、图片 OCR 等场景，以及多语言文档翻译（粘贴文本/单文件/目录批量，保留术语和代码块） |
+| [docs](./plugins/docs) | Skill | 面向直接处理文档与扫描件的工具集：支持 Word、PowerPoint、PDF、Excel、图片 OCR 等场景，以及多语言文档翻译（粘贴文本/单文件/目录批量，保留术语和代码块）；网页内容抓取（crawl4ai），自动将网页转为 LLM 友好的 Markdown 格式 |
 | [html-lsp](./plugins/html-lsp) | LSP | HTML/CSS/ESLint 语言服务器集成，提供前端开发时的语法检查、代码补全和实时 lint 诊断 |
 | [statusline](./plugins/statusline) | Command | 自适应终端宽度的状态行插件，显示上下文窗口、Git、Token、Effort 等信息 |
 | [rtk](./plugins/rtk) | Hook | CLI 工具，过滤命令输出减少 LLM token 消耗（节省 60-90%） |
@@ -49,6 +49,9 @@
     │   ├── .claude-plugin/
     │   │   └── plugin.json   # 插件清单文件
     │   └── skills/
+    │       ├── crawl4ai/
+    │       │   ├── SKILL.md      # 网页抓取技能指引
+    │       │   └── references/   # API 端点和容器管理文档
     │       ├── proc/
     │       │   ├── SKILL.md      # 文档处理技能指引
     │       │   └── references/   # 参考文档

@@ -18,7 +18,7 @@
     },
     {
       "name": "docs",
-      "description": "面向直接处理文档与扫描件的 Skill 插件，覆盖 Word、PowerPoint、PDF、Excel、图片 OCR 等场景，以及多语言文档翻译（本地化/国际化）场景。",
+      "description": "面向直接处理文档与扫描件的 Skill 插件，覆盖 Word、PowerPoint、PDF、Excel、图片 OCR 等场景，以及多语言文档翻译（本地化/国际化）场景；网页内容抓取（crawl4ai），自动将网页转为 LLM 友好的 Markdown 格式。",
       "category": "productivity",
       "source": "./plugins/docs",
       "homepage": "https://github.com/jeffrey1205/claude-plugins",
@@ -30,7 +30,9 @@
         "word",
         "excel",
         "ppt",
-        "translation"
+        "translation",
+        "web-scraping",
+        "crawl4ai"
       ]
     },
     {
