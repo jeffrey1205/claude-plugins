@@ -1,0 +1,11 @@
+{
+  "name": "trans",
+  "displayName": "Trans",
+  "description": "文档翻译 Skill 插件，支持多语言文档翻译（本地化/国际化），保留代码块、技术标识符和专业术语。",
+  "version": "1.0.0",
+  "author": {
+    "name": "Jeffrey"
+  },
+  "homepage": "https://github.com/jeffrey1205/claude-plugins",
+  "license": "MIT"
+}

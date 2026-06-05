@@ -1,0 +1,11 @@
+{
+  "name": "crawl4ai",
+  "displayName": "Crawl4AI",
+  "description": "网页内容抓取 Skill 插件，自动将网页转换为 LLM 友好的 Markdown 格式，支持容器化部署。",
+  "version": "1.0.0",
+  "author": {
+    "name": "Jeffrey"
+  },
+  "homepage": "https://github.com/jeffrey1205/claude-plugins",
+  "license": "MIT"
+}

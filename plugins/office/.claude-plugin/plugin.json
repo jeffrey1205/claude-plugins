@@ -1,0 +1,11 @@
+{
+  "name": "office",
+  "displayName": "Office",
+  "description": "面向直接处理文档与扫描件的 Skill 插件，覆盖 Word、PowerPoint、PDF、Excel、图片 OCR 等场景。",
+  "version": "1.0.0",
+  "author": {
+    "name": "Jeffrey"
+  },
+  "homepage": "https://github.com/jeffrey1205/claude-plugins",
+  "license": "MIT"
+}
