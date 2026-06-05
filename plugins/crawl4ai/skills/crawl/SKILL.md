@@ -1,5 +1,5 @@
 ---
-name: crawl4ai
+name: crawl
 description: |
   网页内容抓取和提取工具，自动将网页转换为 LLM 友好的 Markdown 格式。
   

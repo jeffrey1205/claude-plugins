@@ -9,7 +9,7 @@ description: |
   
   即使用户没有明确说"生成文档"，只要涉及代码理解、项目探索、模块分析的需求，都应优先使用此 skill。
   
-  **不触发**：纯功能开发、Bug修复（用常规开发流程）、性能分析（用 performance-review）、文档编辑（用 office）。
+  **不触发**：纯功能开发、Bug修复（用常规开发流程）、性能分析（用 performance-review）、文档编辑（用 office:docs）。
 ---
 
 # 代码理解 Skill
@@ -42,7 +42,7 @@ description: |
 - "帮我实现一个新功能"
 - "修复这个 bug"
 - "这个服务 CPU 很高，帮我分析"（用 performance-review）
-- "把这个 PDF 转成 Word"（用 office）
+- "把这个 PDF 转成 Word"（用 office:docs）
 
 ## 工作流程
 
