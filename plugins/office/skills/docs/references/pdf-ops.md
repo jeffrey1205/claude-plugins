@@ -127,7 +127,7 @@ PYEOF
 
 如需从零创建 PDF 文档（非合并/拆分），当前环境未安装 `reportlab`。
 
-遇到此需求时安装：`pip install reportlab`
+遇到此需求时安装：`uv pip install --python ~/.local/pyoffice/bin/python reportlab`
 
 ```python
 from reportlab.lib.pagesizes import A4

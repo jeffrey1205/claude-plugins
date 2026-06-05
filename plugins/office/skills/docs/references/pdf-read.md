@@ -226,7 +226,7 @@ PYEOF
 
 如需从 PDF 中提取结构化表格数据（尤其是带边框的表格），当前环境未安装 `pdfplumber`。
 
-遇到此需求时安装：`pip install pdfplumber`
+遇到此需求时安装：`uv pip install --python ~/.local/pyoffice/bin/python pdfplumber`
 
 ```python
 import pdfplumber
