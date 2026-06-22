@@ -30,21 +30,46 @@ description: |
 
 > **环境依赖缺失？** 读取 `references/setup.md` 查看安装步骤。
 
+## 环境依赖分组
+
+本 skill 的依赖分为两组：
+
+| 分组 | 用途 | 默认策略 |
+|------|------|----------|
+| 基础 Office | Word、PowerPoint、Excel、老版 `.doc/.xls` 读取 | 默认检测与安装 |
+| PDF / 图片 / OCR | PDF 读取与操作、图片 OCR、扫描版 PDF OCR | 仅在任务涉及 PDF 或图片 OCR 时检测；安装前需用户确认，或只提供命令 |
+
 ## 环境检测
 
-运行检测脚本确认依赖是否已安装：
+### 基础 Office 依赖检测
 
-### 检测脚本
+默认只检测基础 Office 依赖，用于确认 Word/PPT/Excel 处理能力是否可用：
 
 ```bash
-# 检测 uv 虚拟环境中的所有 Python 库
-~/.local/pyoffice/bin/python -c "import docx, pptx, PIL, cv2, pytesseract, pymupdf, openpyxl, xlrd, pandas; print('All libs OK')" 2>/dev/null || echo "MISSING: python libs"
+# 检测 uv 虚拟环境中的基础 Office Python 库
+~/.local/pyoffice/bin/python -c "import docx, pptx, openpyxl, xlrd, pandas; print('Base Office libs OK')" 2>/dev/null || echo "MISSING: base office python libs"
 
-# 检测命令行工具
-for cmd in tesseract pdftotext pdfinfo pdfimages antiword catdoc; do
+# 检测基础 Office 命令行工具
+for cmd in antiword catdoc; do
   command -v $cmd >/dev/null 2>&1 || echo "MISSING: $cmd"
 done
 ```
+
+### PDF / 图片 / OCR 可选依赖检测
+
+当任务涉及 PDF、图片 OCR、扫描版 PDF 或 PDF 嵌入图片提取时，再运行以下检测：
+
+```bash
+# 检测 uv 虚拟环境中的 PDF / 图片 / OCR Python 库
+~/.local/pyoffice/bin/python -c "import PIL, cv2, pytesseract, pymupdf; print('PDF/Image libs OK')" 2>/dev/null || echo "MISSING: pdf/image python libs"
+
+# 检测 PDF / OCR 命令行工具
+for cmd in tesseract pdftotext pdfinfo pdfimages; do
+  command -v $cmd >/dev/null 2>&1 || echo "MISSING: $cmd"
+done
+```
+
+> **提示**：如果 PDF / 图片 / OCR 依赖缺失，先询问用户是否安装。用户确认后执行安装；如果用户不想安装，只提供安装命令。
 
 ## 工具速查
 
@@ -60,19 +85,39 @@ done
 
 **使用 uv 虚拟环境调用**（`~/.local/pyoffice/bin/python -c "import xxx"`）：
 
+#### 基础 Office 库
+
 | 库 | 用途 | 示例 |
 |----|------|------|
 | `docx` (python-docx) | Word .docx 读写、格式、表格、TOC | `from docx import Document` |
 | `pptx` (python-pptx) | PowerPoint .pptx 读写、母版、布局 | `from pptx import Presentation` |
-| `PIL` (pillow) | 图片处理、格式转换、OCR 预处理 | `from PIL import Image` |
-| `cv2` (opencv-headless) | 图像处理、OCR 预处理（二值化、去噪） | `import cv2` |
-| `pytesseract` | OCR 引擎接口 | `import pytesseract` |
-| `pymupdf` (PyMuPDF) | PDF 读写、文本提取、页面渲染、合并/拆分/加密 | `import pymupdf` |
 | `openpyxl` | Excel .xlsx 读写、格式化、公式 | `import openpyxl` |
 | `xlrd` | Excel 旧版 .xls 读取 | `import xlrd` |
 | `pandas` | 数据分析、表格导出 | `import pandas as pd` |
 
+#### PDF / 图片 / OCR 可选库
+
+这些库仅在处理 PDF、图片或 OCR 时安装和使用：
+
+| 库 | 用途 | 示例 |
+|----|------|------|
+| `pymupdf` (PyMuPDF) | PDF 读写、文本提取、页面渲染、合并/拆分/加密 | `import pymupdf` |
+| `PIL` (pillow) | 图片处理、格式转换、OCR 预处理 | `from PIL import Image` |
+| `cv2` (opencv-headless) | 图像处理、OCR 预处理（二值化、去噪） | `import cv2` |
+| `pytesseract` | OCR 引擎接口 | `import pytesseract` |
+
 ### 命令行工具
+
+#### 基础 Office 工具
+
+| 命令 | 路径 | 用途 |
+|------|------|------|
+| `antiword` | `/usr/bin/antiword` | 老版 `.doc` 文件转文本 |
+| `catdoc` | `/usr/bin/catdoc` | 老版 `.doc` 备选读取（兼容性更好，尤其 WPS 创建的文档） |
+
+#### PDF / OCR 可选工具
+
+这些工具仅在处理 PDF、图片或 OCR 时安装和使用：
 
 | 命令 | 路径 | 用途 |
 |------|------|------|
@@ -80,15 +125,13 @@ done
 | `pdftotext` | `/usr/bin/pdftotext` | PDF 文本提取 |
 | `pdfinfo` | `/usr/bin/pdfinfo` | PDF 元信息查看 |
 | `pdfimages` | `/usr/bin/pdfimages` | PDF 嵌入图片提取 |
-| `antiword` | `/usr/bin/antiword` | 老版 .doc 文件转文本 |
-| `catdoc` | `/usr/bin/catdoc` | 老版 .doc 备选读取（兼容性更好，尤其 WPS 创建的文档） |
 
 ## 注意事项
 
 1. **PyMuPDF 导入**：使用 `import pymupdf`（pip 安装的最新版）。
 2. **调用路径**：所有 Python 库 **必须**使用 `~/.local/pyoffice/bin/python` 调用。
 3. **中文 OCR**：tesseract 已安装 `chi_sim` 语言包，使用时加 `-l chi_sim` 或 `lang='chi_sim'`。
-4. **老版 .doc**：先用 `antiword` 尝试，失败时换 `catdoc`（对 WPS 创建的 .doc 兼容性更好）。
+4. **老版 .doc**：先用 `antiword` 尝试，失败时换 `catdoc`（对 WPS 创建的 `.doc` 兼容性更好）。
 5. **无 GUI**：opencv 使用的是 `opencv-python-headless`，不支持 `cv2.imshow()` 等需要显示器的操作，用 `cv2.imwrite()` 保存结果。
 6. **PPT 幻灯片遍历**：`prs.slides` 不支持切片操作，需用计数器或 `itertools.islice`。
 7. **Excel 公式**：使用 Excel 公式而非 Python 硬编码计算结果，确保文件可在 Excel 中重新计算。
