@@ -12,14 +12,7 @@ CLAUDE_MD_PATH = "CLAUDE.md"
 
 # MCP 工具权限列表
 MCP_PERMISSIONS = [
-    "mcp__plugin_codegraph_codegraph__codegraph_search",
-    "mcp__plugin_codegraph_codegraph__codegraph_context",
-    "mcp__plugin_codegraph_codegraph__codegraph_callers",
-    "mcp__plugin_codegraph_codegraph__codegraph_callees",
-    "mcp__plugin_codegraph_codegraph__codegraph_impact",
-    "mcp__plugin_codegraph_codegraph__codegraph_node",
-    "mcp__plugin_codegraph_codegraph__codegraph_status",
-    "mcp__plugin_codegraph_codegraph__codegraph_files",
+    "mcp__plugin_codegraph_codegraph__codegraph_explore",
 ]
 
 CODEGRAPH_MD_CONTENT = """## CodeGraph
@@ -32,13 +25,7 @@ CodeGraph builds a semantic knowledge graph of codebases for faster, smarter cod
 
 | Tool | Use For |
 |------|---------|
-| `codegraph_context` | Map a task / feature / area first — composes search + node + callers + callees in one call |
-| `codegraph_trace` | "How does X reach Y" — the call path, each hop's body inline (follows dynamic-dispatch hops grep can't) |
 | `codegraph_explore` | Survey several related symbols' source in ONE budget-capped call |
-| `codegraph_search` | Find a symbol by name |
-| `codegraph_callers` / `codegraph_callees` | Walk call flow one hop at a time |
-| `codegraph_impact` | Check what's affected before editing |
-| `codegraph_node` | Get a single symbol's source / signature |
 
 A direct CodeGraph answer is a handful of calls; a grep/read exploration is dozens.
 """

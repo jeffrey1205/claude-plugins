@@ -1,5 +1,5 @@
 ---
-name: init
+name: setup
 description: 在当前项目初始化 codegraph 索引，构建代码知识图谱
 model: haiku
 effort: low
