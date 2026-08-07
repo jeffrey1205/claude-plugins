@@ -2,17 +2,13 @@
   "name": "codegraph",
   "displayName": "CodeGraph",
   "description": "代码图谱MCP服务器，提供语义搜索、调用图分析、影响分析等功能",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": {
     "name": "Colby McHenry"
   },
   "homepage": "https://github.com/colbymchenry/codegraph",
   "license": "MIT",
   "commands": [
-    "./commands/install.md",
-    "./commands/init.md",
-    "./commands/sync.md",
-    "./commands/status.md",
-    "./commands/reindex.md"
+    "./commands/install.md"
   ]
 }

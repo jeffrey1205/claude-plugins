@@ -15,18 +15,13 @@
 ### 1. 安装 CLI
 
 ```bash
-/codegraph:install
-```
-
-或手动安装：
-```bash
 npm i -g @colbymchenry/codegraph
 ```
 
 ### 2. 初始化项目索引
 
 ```bash
-/codegraph:init
+codegraph init -i
 ```
 
 ### 3. 同步索引
@@ -34,13 +29,8 @@ npm i -g @colbymchenry/codegraph
 代码变更后，增量更新索引：
 
 ```bash
-/codegraph:sync
+codegraph sync
 ```
-
-## 其他命令
-
-- `/codegraph:status` - 查看索引状态
-- `/codegraph:reindex` - 全量重建索引（索引损坏或大规模重构后使用）
 
 ## 参考资料
 
