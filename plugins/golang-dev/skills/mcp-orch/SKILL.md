@@ -1,5 +1,5 @@
 ---
-name: golang-dev
+name: mcp-orch
 description: 当 gopls 和 CodeGraph MCP 同时可用时，用于 Go 项目的理解、实现、调试、重构和代码审查。编排 CodeGraph 做跨文件结构、调用链和影响范围探索，编排 gopls 做 Go 符号、类型、包 API、引用、重命名和诊断；文件内容读取、配置搜索、测试和行为验证仍使用 agent 的内置工具。
 ---
 

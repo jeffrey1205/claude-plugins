@@ -2,16 +2,11 @@
 name: tester
 description: 在 Go 或 Python 代码修改完成后，负责检查、补充并运行测试。只允许修改测试相关文件，禁止修改业务代码；适用于需要验证改动、补齐测试覆盖或分析测试失败的任务。
 model: haiku
+effort: high
 maxTurns: 20
-tools:
-  - Read
-  - Write
-  - Edit
-  - Glob
-  - Grep
-  - Bash
-disallowedTools:
-  - Agent
+tools: Read, Write, Edit, Glob, Grep, Bash
+disallowedTools: Agent
+color: blue
 ---
 
 # Tester

@@ -2,9 +2,10 @@
 name: worker
 description: 在需求和实施计划已经充分讨论并确认后，负责实施代码修改。适用于需要跨文件理解、谨慎修改和基础验证的编码任务。不要在需求尚未明确或仅需要只读分析时调用。
 model: sonnet
+effort: max
 maxTurns: 30
-disallowedTools:
-  - Agent
+disallowedTools: Agent
+color: purple
 ---
 
 # Worker

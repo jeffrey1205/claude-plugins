@@ -20,22 +20,24 @@
       ]
     },
     {
-      "name": "gopls",
-      "description": "基于 Go 官方 gopls 语言服务器的 MCP 工具集，提供 AST 级符号搜索、引用查找、安全重命名、编译诊断、漏洞扫描等精确语义分析能力",
+      "name": "golang-dev",
+      "description": "Go 开发工具集：gopls MCP 语义分析、MCP 编排工具、Rob Pike 的 Go Proverbs 编程哲学指导",
       "category": "development",
-      "source": "./plugins/gopls",
+      "source": "./plugins/golang-dev",
       "homepage": "https://github.com/jeffrey1205/claude-plugins",
       "keywords": [
-        "mcp",
-        "gopls",
         "go",
+        "gopls",
         "lsp",
-        "code-analysis"
+        "mcp",
+        "code-analysis",
+        "rob-pike",
+        "architecture"
       ]
     },
     {
       "name": "coder",
-      "description": "编程大师思维工具集：Rob Pike 的 Go Proverbs 指导（设计、编码、审查、调试、重构全阶段）+ Linus Torvalds 的代码品味与架构哲学，含 Go 开发编排 skill 及 worker/tester agent，适用于 C/Go/Python 后端及系统编程场景。",
+      "description": "编程大师思维工具集：Karpathy 编码指南 + Linus Torvalds 的代码品味与架构哲学，含 worker/tester agent，适用于后端及系统编程场景",
       "category": "development",
       "source": "./plugins/coder",
       "homepage": "https://github.com/jeffrey1205/claude-plugins",
@@ -45,7 +47,7 @@
         "c",
         "python",
         "code-review",
-        "rob-pike",
+        "karpathy",
         "linus-torvalds",
         "architecture"
       ]
@@ -64,7 +66,7 @@
     },
     {
       "name": "statusline",
-      "description": "自适应终端宽度的状态行插件，显示上下文窗口、Git、Token、Effort 等信息。",
+      "description": "自适应终端宽度的状态行插件，显示上下文窗口、Git、Token、Effort 等信息",
       "category": "productivity",
       "source": "./plugins/statusline",
       "homepage": "https://github.com/jeffrey1205/claude-plugins",
