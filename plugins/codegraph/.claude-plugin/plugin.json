@@ -7,8 +7,5 @@
     "name": "Colby McHenry"
   },
   "homepage": "https://github.com/colbymchenry/codegraph",
-  "license": "MIT",
-  "commands": [
-    "./commands/install.md"
-  ]
+  "license": "MIT"
 }

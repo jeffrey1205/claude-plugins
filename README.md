@@ -22,9 +22,9 @@
 
 | 插件名 | 类型 | 描述 |
 |--------|------|------|
-| [codegraph](./plugins/codegraph) | MCP Server + Skill | 代码图谱 MCP 服务器，基于 Rust 内核构建知识图谱，提供语义搜索、调用图分析、影响分析，支持 20+ 语言 |
+| [codegraph](./plugins/codegraph) | MCP Server + Skill | 代码图谱 MCP 服务器，提供语义搜索、调用图分析、影响分析 |
 | [gopls](./plugins/gopls) | MCP Server + Skill | 基于 Go 官方 gopls 语言服务器的 MCP 工具集，提供 AST 级符号搜索、引用查找、安全重命名、编译诊断、漏洞扫描 |
-| [coder](./plugins/coder) | Skill | 编程大师思维工具集：Rob Pike 的 Go Proverbs 全阶段指导 + Linus Torvalds 的代码品味与架构哲学 |
+| [coder](./plugins/coder) | Skill + Agent | 编程大师思维工具集：Rob Pike 的 Go Proverbs 指导 + Linus Torvalds 的代码品味与架构哲学，含 Go 开发编排 skill 及 worker/tester agent |
 | [rtk](./plugins/rtk) | Hook | CLI 输出过滤工具，减少 LLM token 消耗（节省 60-90%） |
 | [statusline](./plugins/statusline) | Command + Script | 自适应终端宽度的状态行插件，显示上下文窗口、Git、Token、Effort 等信息 |
 
@@ -39,11 +39,9 @@
     │   ├── .claude-plugin/
     │   │   └── plugin.json   # 插件清单
     │   ├── .mcp.json         # MCP 服务器配置
-    │   ├── skills/
-    │   │   └── codegraph/
-    │   │       └── SKILL.md  # codegraph 使用指导
-    │   └── commands/
-    │       └── install.md    # 安装命令
+    │   └── skills/
+    │       └── codegraph/
+    │           └── SKILL.md  # codegraph 使用指导
     ├── gopls/
     │   ├── .claude-plugin/
     │   │   └── plugin.json   # 插件清单
@@ -54,12 +52,17 @@
     ├── coder/
     │   ├── .claude-plugin/
     │   │   └── plugin.json   # 插件清单
+    │   ├── agents/
+    │   │   ├── worker.md     # 代码实施 agent
+    │   │   └── tester.md     # 测试 agent
     │   └── skills/
     │       ├── rob-pike/
     │       │   ├── SKILL.md      # Go Proverbs 全阶段指导
     │       │   └── proverbs/     # 19 条 proverb 详细规则
-    │       └── linus-torvalds-perspective/
-    │           └── SKILL.md      # Linus 编程哲学
+    │       ├── linus-torvalds/
+    │       │   └── SKILL.md      # Linus 编程哲学
+    │       └── golang-dev/
+    │           └── SKILL.md      # Go 开发编排 skill
     ├── rtk/
     │   ├── .claude-plugin/
     │   │   └── plugin.json   # 插件清单

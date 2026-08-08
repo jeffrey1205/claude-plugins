@@ -1,7 +1,7 @@
 {
   "name": "coder",
   "displayName": "Coder",
-  "description": "编程大师思维工具集：Rob Pike 的 Go Proverbs 指导（设计、编码、审查、调试、重构全阶段）+ Linus Torvalds 的代码品味与架构哲学，适用于 C/Go/Python 后端及系统编程场景。",
+  "description": "编程大师思维工具集：Rob Pike 的 Go Proverbs 指导（设计、编码、审查、调试、重构全阶段）+ Linus Torvalds 的代码品味与架构哲学，含 Go 开发编排 skill 及 worker/tester agent，适用于 C/Go/Python 后端及系统编程场景。",
   "version": "1.0.1",
   "author": {
     "name": "Jeffrey"
