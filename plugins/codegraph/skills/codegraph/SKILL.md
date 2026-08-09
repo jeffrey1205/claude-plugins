@@ -1,6 +1,6 @@
 ---
 name: codegraph
-description: 在已建立 CodeGraph 索引（项目目录存在 .codegraph）的代码库中，使用唯一的 codegraph_explore MCP 工具理解代码结构、调用链和影响范围。当用户问“怎么工作”“调用链”“影响范围”“架构”“谁调用了”“改了会怎样”、how does X work、blast radius、callers、what calls 或 impact of changing，或需要在修改前探索不熟悉的代码区域时使用。不适用于简单文件读取、配置文本搜索、语法问题或非代码任务。
+description: 在已建立 codegraph 索引（项目目录存在 .codegraph）的代码库中，使用唯一的 codegraph_explore MCP 工具理解代码结构、调用链和影响范围。当用户问“怎么工作”“调用链”“影响范围”“架构”“谁调用了”“改了会怎样”、how does X work、blast radius、callers、what calls 或 impact of changing，或需要在修改前探索不熟悉的代码区域时使用。不适用于简单文件读取、配置文本搜索、语法问题或非代码任务。
 ---
 
 # CodeGraph 语义代码图谱
