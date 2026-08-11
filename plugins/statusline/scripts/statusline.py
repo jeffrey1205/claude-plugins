@@ -425,10 +425,13 @@ def build_statusline(data):
     cache_ttl = get_prompt_cache_ttl(transcript)
     cache_hit = get_cache_hit_rate(transcript)
 
-    # Line 1: model | context bar | directory | git | effort
+    # Line 1: model+effort | context bar | directory | git
     line1_parts = []
     if model:
-        line1_parts.append(f"{BRIGHT_MAGENTA}{model}{RESET}")
+        model_display = f"{BRIGHT_MAGENTA}{model}{RESET}"
+        if effort:
+            model_display += f" {YELLOW}{effort}{RESET}"
+        line1_parts.append(model_display)
     line1_parts.append(ctx_bar)
     if directory:
         line1_parts.append(f"{BLUE}{directory}{RESET}")
@@ -439,8 +442,6 @@ def build_statusline(data):
         if git_info['modified'] > 0:
             git_str += f" {YELLOW}~{git_info['modified']}{RESET}"
         line1_parts.append(git_str)
-    if effort:
-        line1_parts.append(f"{YELLOW}Effort: {effort}{RESET}")
 
     # Line 2: tokens | duration | cache ttl | cache hit | speed
     line2_parts = []
