@@ -1,0 +1,44 @@
+{
+  "name": "cc-hub",
+  "interface": {
+    "displayName": "CC Hub"
+  },
+  "plugins": [
+    {
+      "name": "codegraph",
+      "source": {
+        "source": "local",
+        "path": "./plugins/codegraph"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Development"
+    },
+    {
+      "name": "golang-dev",
+      "source": {
+        "source": "local",
+        "path": "./plugins/golang-dev"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Development"
+    },
+    {
+      "name": "coder",
+      "source": {
+        "source": "local",
+        "path": "./plugins/coder"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Development"
+    }
+  ]
+}

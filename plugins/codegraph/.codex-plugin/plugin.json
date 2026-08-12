@@ -1,0 +1,19 @@
+{
+  "name": "codegraph",
+  "version": "1.0.1",
+  "description": "代码图谱MCP服务器，提供语义搜索、调用图分析、影响分析等功能",
+  "author": {
+    "name": "Colby McHenry"
+  },
+  "homepage": "https://github.com/colbymchenry/codegraph",
+  "license": "MIT",
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "CodeGraph",
+    "shortDescription": "代码图谱与代码语义分析",
+    "longDescription": "提供语义搜索、调用图分析、影响分析等代码图谱能力。",
+    "developerName": "Colby McHenry",
+    "category": "Development"
+  }
+}
