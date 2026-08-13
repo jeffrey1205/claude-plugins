@@ -1,12 +1,10 @@
 # claude-plugins
 
-个人 Claude Code 插件集合，包含 MCP 服务器、编程哲学 Skill、开发工具等扩展。
+个人 Claude Code / Codex 插件集合，包含 MCP 服务器、编程哲学 Skill、开发工具等扩展。
 
 ## 安装方式
 
-### 通过 Marketplace 安装
-
-先将本仓库添加为插件市场：
+### Claude Code
 
 ```bash
 /plugin marketplace add jeffrey1205/claude-plugins
@@ -16,6 +14,16 @@
 /plugin install coder@cc-hub
 /plugin install rtk@cc-hub
 /plugin install statusline@cc-hub
+```
+
+### Codex
+
+```bash
+codex plugin marketplace add jeffrey1205/claude-plugins
+
+codex plugin add codegraph@cc-hub
+codex plugin add golang-dev@cc-hub
+codex plugin add coder@cc-hub
 ```
 
 ## 插件列表
@@ -32,8 +40,11 @@
 
 ```
 .
+├── .agents/
+│   └── plugins/
+│       └── marketplace.json    # Codex 插件市场目录文件
 ├── .claude-plugin/
-│   └── marketplace.json    # 插件市场目录文件
+│   └── marketplace.json    # Claude Code 插件市场目录文件
 └── plugins/
     ├── codegraph/
     │   ├── .claude-plugin/
@@ -91,9 +102,15 @@
 
 然后在 `.claude-plugin/marketplace.json` 的 `plugins` 数组中添加新条目。
 
+codex创建插件流程类似。
+
 ## 参考文档
 
-[创建插件](https://code.claude.com/docs/zh-CN/plugins) · [插件参考](https://code.claude.com/docs/zh-CN/plugins-reference)
+[Claude Code 插件](https://code.claude.com/docs/zh-CN/plugins)
+
+[Claude Code 插件参考](https://code.claude.com/docs/zh-CN/plugins-reference)
+
+[codex 插件](https://developers.openai.com/plugins/build/plugins)
 
 ## 许可证
 
