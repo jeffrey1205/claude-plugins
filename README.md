@@ -14,6 +14,7 @@
 /plugin install coder@cc-hub
 /plugin install rtk@cc-hub
 /plugin install statusline@cc-hub
+/plugin install superpowers@cc-hub
 ```
 
 ### Codex
@@ -24,6 +25,7 @@ codex plugin marketplace add jeffrey1205/claude-plugins
 codex plugin add codegraph@cc-hub
 codex plugin add golang-dev@cc-hub
 codex plugin add coder@cc-hub
+codex plugin add superpowers@cc-hub
 ```
 
 ## 插件列表
@@ -35,6 +37,7 @@ codex plugin add coder@cc-hub
 | [coder](./plugins/coder) | Skill + Agent | 编程大师思维工具集：Karpathy 编码指南 + Linus Torvalds 的代码品味与架构哲学，含 worker/tester agent |
 | [rtk](./plugins/rtk) | Hook | CLI 输出过滤工具，减少 LLM token 消耗（节省 60-90%） |
 | [statusline](./plugins/statusline) | Command + Script | 自适应终端宽度的状态行插件，显示上下文窗口、Git、Token、Effort 等信息 |
+| [superpowers](./plugins/superpowers) | Skill | 官方 Superpowers 技能扩展集，包含工作流拆解、系统化重构、设计规范等能力 |
 
 ## 目录结构
 
@@ -82,18 +85,34 @@ codex plugin add coder@cc-hub
     │   ├── hooks/
     │   │   └── hooks.json    # PreToolUse hook 配置
     │   └── README.md
-    └── statusline/
-        ├── .claude-plugin/
+    ├── statusline/
+    │   ├── .claude-plugin/
+    │   │   └── plugin.json   # 插件清单
+    │   ├── commands/
+    │   │   └── setup.md      # setup 命令
+    │   └── scripts/
+    │       ├── statusline.py       # 状态行脚本
+    │       └── setup-statusline.py # 配置脚本
+    └── superpowers/
+        ├── .codex-plugin/
         │   └── plugin.json   # 插件清单
-        ├── commands/
-        │   └── setup.md      # setup 命令
-        └── scripts/
-            ├── statusline.py       # 状态行脚本
-            └── setup-statusline.py # 配置脚本
+        ├── assets/           # 静态资源文件
+        └── skills/           # Superpowers 全套技能集
+```
+
+## superpowers
+
+由于OpenAI官方仓库中 superpowers 插件版本更新缓慢，通过上游源码进行打包与替换。
+
+在 superpowers 上游仓库根目录下运行（仅打包核心配置与技能，排除不必要的 hook 与调试脚本）：
+
+``` bash
+zip -r superpowers.zip .codex-plugin skills assets
 ```
 
 ## 添加新插件
 
+以 Claude Code 插件为例，Codex 插件类似
 在 `plugins/` 目录下新建插件目录，包含：
 - `.claude-plugin/plugin.json` — 插件清单（name, description, version 等）
 - `.mcp.json` — MCP 服务器配置（如适用）
