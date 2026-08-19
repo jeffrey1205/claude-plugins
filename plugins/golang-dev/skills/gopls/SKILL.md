@@ -28,7 +28,7 @@ description: 使用 gopls MCP 工具进行 Go 代码语义分析。当项目包�
 | `go_file_context` | 文件的跨文件依赖摘要 | `read` 整个大文件 |
 | `go_rename_symbol` | 生成 AST 级重命名 diff | 正则替换（危险） |
 | `go_diagnostics` | workspace 解析、构建和相关诊断 | `go build` |
-| `go_vulncheck` | Go workspace 漏洞检查 | `govulncheck` CLI |
+| `go_vulncheck` | Go workspace 漏洞检查 | `govulncheck` CLI (无调用链过滤)|
 
 ## 何时用 gopls vs 内置工具
 
@@ -102,7 +102,8 @@ go_symbol_references(file="/absolute/path/internal/handler/http.go", symbol="han
 go_file_context(file="/absolute/path/internal/handler/user.go")
 ```
 
-返回：文件所属包，以及该文件引用的其他文件和声明摘要；它不是完整源码读取工具。
+返回：文件所属模块以及该文件引用的其他文件的声明摘要；它不是完整源码读取工具。
+注意：返回中的"所属包"实际来自 `go.mod` 的 module 名，**不是**源码 `package` 子句声明的包名，两者可能不同，不能据此推断包名。
 
 ### go_rename_symbol — 生成安全重命名修改
 
@@ -125,13 +126,13 @@ go_diagnostics(files=["/absolute/path/internal/handler/user.go"])
 
 ### go_vulncheck — 安全漏洞扫描
 
-运行 Go workspace 的漏洞检查，基于调用链减少无关告警。它可能受依赖、构建配置和扫描范围影响，不应表述为零假阳性或完整安全审计。
+运行 Go workspace 的漏洞检查。注意其输出**不含可达性标注**：报出的漏洞只代表"依赖或标准库存在该已知漏洞"，不代表当前代码一定调用了受影响路径，发现数量不能直接视为风险等级。需要按调用链过滤的精确结果时，改用官方 `govulncheck` CLI。结果可能受依赖、构建配置和扫描范围影响，不应表述为零假阳性或完整安全审计。
 
 ```
 go_vulncheck()
 ```
 
-返回：漏洞发现、受影响的包和扫描日志。
+返回：漏洞发现、受影响的包和扫描日志。发现列表需结合代码自行评估是否实际受影响。
 
 ## 典型工作流
 

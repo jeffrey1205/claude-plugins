@@ -1,6 +1,6 @@
 {
   "name": "golang-dev",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Go 开发工具集：gopls MCP 语义分析、MCP 编排工具、Rob Pike 的 Go Proverbs 编程哲学指导",
   "author": {
     "name": "Jeffrey"
