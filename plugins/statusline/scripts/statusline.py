@@ -149,7 +149,7 @@ def get_token_display(data, transcript):
 
 
 # ---------------------------------------------------------------------------
-# Sub-agent Token Tracking (Isolated & Incremental)
+# Sub-agent Token Tracking (Isolated & Incremental with Map-based Overwrite)
 # ---------------------------------------------------------------------------
 
 def get_subagent_tokens(data, transcript):
@@ -202,13 +202,13 @@ def get_subagent_tokens(data, transcript):
             continue
 
         last_offset = 0
-        sub_tokens = {'input': 0, 'output': 0}
-        seen_msg_ids = set()
+        message_usages = {}
+        non_id_tokens = {'input': 0, 'output': 0}
 
         if cached and curr_size >= cached.get('size', 0) and cached.get('mtime', 0) <= curr_mtime:
             last_offset = cached.get('offset', 0)
-            sub_tokens = cached.get('tokens', {'input': 0, 'output': 0})
-            seen_msg_ids = set(cached.get('seen_message_ids', []))
+            message_usages = cached.get('message_usages', {})
+            non_id_tokens = cached.get('non_id_tokens', {'input': 0, 'output': 0})
 
         final_offset = last_offset
         try:
@@ -233,24 +233,28 @@ def get_subagent_tokens(data, transcript):
                             msg_id = msg.get('id')
                             usage = msg.get('usage')
                             if usage and isinstance(usage, dict):
+                                inp = usage.get('input_tokens', 0) or 0
+                                out = usage.get('output_tokens', 0) or 0
                                 if msg_id:
-                                    if msg_id not in seen_msg_ids:
-                                        seen_msg_ids.add(msg_id)
-                                        sub_tokens['input'] += usage.get('input_tokens', 0) or 0
-                                        sub_tokens['output'] += usage.get('output_tokens', 0) or 0
+                                    message_usages[msg_id] = {'input': inp, 'output': out}
                                 else:
-                                    sub_tokens['input'] += usage.get('input_tokens', 0) or 0
-                                    sub_tokens['output'] += usage.get('output_tokens', 0) or 0
+                                    non_id_tokens['input'] += inp
+                                    non_id_tokens['output'] += out
                 final_offset = f.tell()
         except Exception:
             pass
+
+        sub_in = sum(u['input'] for u in message_usages.values()) + non_id_tokens['input']
+        sub_out = sum(u['output'] for u in message_usages.values()) + non_id_tokens['output']
+        sub_tokens = {'input': sub_in, 'output': sub_out}
 
         cache_payload = {
             'mtime': curr_mtime,
             'size': curr_size,
             'offset': final_offset,
             'tokens': sub_tokens,
-            'seen_message_ids': list(seen_msg_ids)
+            'message_usages': message_usages,
+            'non_id_tokens': non_id_tokens
         }
         try:
             with open(cache_file, 'w') as f:
@@ -258,8 +262,8 @@ def get_subagent_tokens(data, transcript):
         except OSError:
             pass
 
-        total_sub_in += sub_tokens.get('input', 0)
-        total_sub_out += sub_tokens.get('output', 0)
+        total_sub_in += sub_in
+        total_sub_out += sub_out
 
     return {'input': total_sub_in, 'output': total_sub_out}
 
@@ -291,7 +295,7 @@ def get_model_short(data):
 
 
 # ---------------------------------------------------------------------------
-# Transcript Incremental JSONL parsing (Safe & Full ID Deduplication)
+# Transcript Incremental JSONL parsing (Map-based Overwrite Dedup)
 # ---------------------------------------------------------------------------
 
 def parse_transcript(transcript_path, session_id):
@@ -327,7 +331,8 @@ def parse_transcript(transcript_path, session_id):
     running_tools = {}
     tool_counts = {}
     agent_ids = set()
-    seen_message_ids = set()
+    message_usages = {}
+    non_id_tokens = {'input': 0, 'output': 0, 'cache_creation': 0, 'cache_read': 0}
     latest_todos = []
     result = {
         'tools': [],
@@ -339,11 +344,11 @@ def parse_transcript(transcript_path, session_id):
 
     if cached and curr_size >= cached.get('size', 0) and cached.get('mtime', 0) <= curr_mtime:
         last_offset = cached.get('offset', 0)
-        result['session_tokens'] = cached.get('session_tokens', result['session_tokens'])
         running_tools = cached.get('running_tools', {})
         tool_counts = cached.get('tool_counts', {})
         agent_ids = set(cached.get('agent_ids', []))
-        seen_message_ids = set(cached.get('seen_message_ids', []))
+        message_usages = cached.get('message_usages', {})
+        non_id_tokens = cached.get('non_id_tokens', {'input': 0, 'output': 0, 'cache_creation': 0, 'cache_read': 0})
         latest_todos = cached.get('todos', [])
         result['last_assistant_at'] = cached.get('last_assistant_at')
 
@@ -375,18 +380,23 @@ def parse_transcript(transcript_path, session_id):
                         usage = msg.get('usage')
 
                         if usage and isinstance(usage, dict):
+                            inp = usage.get('input_tokens', 0) or 0
+                            out = usage.get('output_tokens', 0) or 0
+                            cc = usage.get('cache_creation_input_tokens', 0) or 0
+                            cr = usage.get('cache_read_input_tokens', 0) or 0
+
                             if msg_id:
-                                if msg_id not in seen_message_ids:
-                                    seen_message_ids.add(msg_id)
-                                    result['session_tokens']['input'] += usage.get('input_tokens', 0) or 0
-                                    result['session_tokens']['output'] += usage.get('output_tokens', 0) or 0
-                                    result['session_tokens']['cache_creation'] += usage.get('cache_creation_input_tokens', 0) or 0
-                                    result['session_tokens']['cache_read'] += usage.get('cache_read_input_tokens', 0) or 0
+                                message_usages[msg_id] = {
+                                    'input': inp,
+                                    'output': out,
+                                    'cache_creation': cc,
+                                    'cache_read': cr
+                                }
                             else:
-                                result['session_tokens']['input'] += usage.get('input_tokens', 0) or 0
-                                result['session_tokens']['output'] += usage.get('output_tokens', 0) or 0
-                                result['session_tokens']['cache_creation'] += usage.get('cache_creation_input_tokens', 0) or 0
-                                result['session_tokens']['cache_read'] += usage.get('cache_read_input_tokens', 0) or 0
+                                non_id_tokens['input'] += inp
+                                non_id_tokens['output'] += out
+                                non_id_tokens['cache_creation'] += cc
+                                non_id_tokens['cache_read'] += cr
 
                 content = entry.get('message', {}).get('content')
                 if not content or not isinstance(content, list):
@@ -434,6 +444,18 @@ def parse_transcript(transcript_path, session_id):
     except Exception:
         final_offset = last_offset
 
+    total_session_tokens = {'input': 0, 'output': 0, 'cache_creation': 0, 'cache_read': 0}
+    for u in message_usages.values():
+        total_session_tokens['input'] += u['input']
+        total_session_tokens['output'] += u['output']
+        total_session_tokens['cache_creation'] += u['cache_creation']
+        total_session_tokens['cache_read'] += u['cache_read']
+    total_session_tokens['input'] += non_id_tokens['input']
+    total_session_tokens['output'] += non_id_tokens['output']
+    total_session_tokens['cache_creation'] += non_id_tokens['cache_creation']
+    total_session_tokens['cache_read'] += non_id_tokens['cache_read']
+
+    result['session_tokens'] = total_session_tokens
     result['tools'] = list(running_tools.values())[-3:]
     result['tool_counts'] = dict(sorted(tool_counts.items(), key=lambda x: -x[1])[:5])
     result['agents'] = len(agent_ids)
@@ -443,11 +465,12 @@ def parse_transcript(transcript_path, session_id):
         'mtime': curr_mtime,
         'size': curr_size,
         'offset': final_offset,
-        'session_tokens': result['session_tokens'],
+        'session_tokens': total_session_tokens,
         'running_tools': running_tools,
         'tool_counts': tool_counts,
         'agent_ids': list(agent_ids),
-        'seen_message_ids': list(seen_message_ids),
+        'message_usages': message_usages,
+        'non_id_tokens': non_id_tokens,
         'todos': latest_todos,
         'last_assistant_at': result['last_assistant_at'],
         'result': result
@@ -560,14 +583,15 @@ def get_prompt_cache_ttl(transcript_data):
 def get_cache_hit_rate(transcript_data):
     try:
         tokens = transcript_data.get('session_tokens', {})
+        input_tokens = tokens.get('input', 0)
         cache_read = tokens.get('cache_read', 0)
         cache_creation = tokens.get('cache_creation', 0)
 
-        total_cache = cache_read + cache_creation
-        if total_cache <= 0:
+        total_input = input_tokens + cache_read + cache_creation
+        if total_input <= 0:
             return None
 
-        hit_rate = cache_read / total_cache
+        hit_rate = cache_read / total_input
         return f"{int(hit_rate * 100)}%"
     except Exception:
         return None
