@@ -134,7 +134,7 @@ def get_directory(data, max_levels=2):
 
 def get_token_display(data, transcript):
     tokens = transcript.get('session_tokens', {})
-    in_tokens = tokens.get('input', 0)
+    in_tokens = tokens.get('input', 0) + tokens.get('cache_read', 0) + tokens.get('cache_creation', 0)
     out_tokens = tokens.get('output', 0)
 
     if in_tokens == 0 and out_tokens == 0:
