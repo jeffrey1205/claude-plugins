@@ -1,0 +1,22 @@
+{
+  "name": "cc-hub",
+  "description": "个人插件集合，包含 MCP 服务器、编程哲学 Skill、开发工具等扩展",
+  "plugins": [
+    {
+      "name": "codegraph",
+      "source": "./plugins/codegraph"
+    },
+    {
+      "name": "golang-dev",
+      "source": "./plugins/golang-dev"
+    },
+    {
+      "name": "coder",
+      "source": "./plugins/coder"
+    },
+    {
+      "name": "docs",
+      "source": "./plugins/docs"
+    }
+  ]
+}
