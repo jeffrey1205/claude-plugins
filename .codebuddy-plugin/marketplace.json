@@ -17,6 +17,10 @@
     {
       "name": "docs",
       "source": "./plugins/docs"
+    },
+    {
+      "name": "statusline",
+      "source": "./plugins/statusline"
     }
   ]
 }

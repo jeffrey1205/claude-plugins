@@ -66,7 +66,7 @@
     },
     {
       "name": "statusline",
-      "description": "自适应终端宽度的状态行插件，显示上下文窗口、Git、Token、Effort 等信息",
+      "description": "双宿主状态行插件（CodeBuddy Code / Claude Code）：上下文进度、Git、Token、请求数、Credits、Effort",
       "category": "productivity",
       "source": "./plugins/statusline",
       "homepage": "https://github.com/jeffrey1205/claude-plugins",

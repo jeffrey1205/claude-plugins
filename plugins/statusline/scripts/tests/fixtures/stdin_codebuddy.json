@@ -1,0 +1,41 @@
+{
+  "hook_event_name": "Status",
+  "session_id": "fixture-codebuddy",
+  "transcript_path": "",
+  "cwd": "/tmp/demo",
+  "permission_mode": "default",
+  "model": {
+    "id": "deepseek-v4.1-flash",
+    "display_name": "Deepseek-V4.1-Flash"
+  },
+  "workspace": {
+    "current_dir": "/tmp/demo",
+    "project_dir": "/tmp/demo",
+    "added_dirs": []
+  },
+  "version": "2.9.0",
+  "output_style": {
+    "name": "default"
+  },
+  "cost": {
+    "total_cost_usd": 0,
+    "total_duration_ms": 45000,
+    "total_api_duration_ms": 2300,
+    "total_lines_added": 10,
+    "total_lines_removed": 2
+  },
+  "context_window": {
+    "total_input_tokens": 12000,
+    "total_output_tokens": 800,
+    "context_window_size": 300000,
+    "used_percentage": 4,
+    "remaining_percentage": 96,
+    "current_usage": {
+      "input_tokens": 12000,
+      "output_tokens": 800,
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 9000
+    }
+  },
+  "exceeds_200k_tokens": false
+}

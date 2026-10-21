@@ -1,0 +1,5 @@
+{"type":"function_call","callId":"c1","name":"Bash","arguments":"{\"command\":\"ls -la\"}","providerData":{"model":"x","requestModelName":"Deepseek-V4.1-Flash","argumentsDisplayText":"ls -la","usage":{"requests":1,"inputTokens":1000,"outputTokens":100,"inputTokensDetails":[{"cached_tokens":800}],"outputTokensDetails":[{"reasoning_tokens":40}]},"rawUsage":{"prompt_cache_hit_tokens":800,"cache_creation_input_tokens":100,"credit":0.5}}}
+{"type":"function_call_result","callId":"c1","name":"Bash","providerData":{}}
+{"type":"function_call","callId":"c2","name":"Agent","arguments":"{\"description\":\"explore\"}","providerData":{"requestModelName":"Deepseek-V4.1-Flash","usage":{"requests":1,"inputTokens":200,"outputTokens":20},"rawUsage":{"credit":0.1}}}
+{"type":"message","role":"assistant","content":"summary","providerData":{"isCompactInternal":true,"isSummary":true}}
+{"type":"summary","summary":"periodic","providerData":{"source":"periodic"}}

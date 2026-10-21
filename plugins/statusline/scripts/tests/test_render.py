@@ -1,0 +1,507 @@
+#!/usr/bin/env python3
+"""Unit tests for render.py module"""
+
+import json
+import os
+import sys
+import re
+import unittest
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from unittest import mock
+
+import stats
+
+from render import (
+    BLOCKS_LINE1,
+    build_statusline,
+    format_recent_calls,
+    format_tools,
+    resolve_layout,
+    _build_recent_parts,
+    _display_dir_name,
+    _format_tool_entry,
+    _render_cwd_git,
+    _render_context_bar,
+    _render_speed,
+)
+
+class TestFormatTools(unittest.TestCase):
+    def test_empty(self):
+        self.assertEqual(format_tools({}), "")
+
+    def test_single_tool(self):
+        result = format_tools({"Bash": 1})
+        self.assertIn("Bash", result)
+        self.assertIn("✓", result)
+
+    def test_tool_with_count(self):
+        result = format_tools({"Bash": 5})
+        self.assertIn("×5", result)
+
+    def test_tool_order(self):
+        result = format_tools({"Grep": 1, "Bash": 1, "Read": 1})
+        bash_pos = result.index("Bash")
+        read_pos = result.index("Read")
+        grep_pos = result.index("Grep")
+        self.assertLess(bash_pos, read_pos)
+        self.assertLess(read_pos, grep_pos)
+
+    def test_agent_running(self):
+        result = format_tools({"Agent": 3}, running_agents=1)
+        self.assertIn("↑", result)
+        self.assertIn("✓", result)
+
+    def test_agent_all_completed(self):
+        result = format_tools({"Agent": 3}, running_agents=0)
+        self.assertIn("✓", result)
+        self.assertNotIn("↑", result)
+
+    def test_agent_all_running(self):
+        result = format_tools({"Agent": 2}, running_agents=2)
+        self.assertIn("↑", result)
+        self.assertNotIn("✓", result)
+
+class TestFormatToolEntry(unittest.TestCase):
+    def test_single(self):
+        result = _format_tool_entry("✓", "\033[0;32m", "Bash", 1)
+        self.assertIn("Bash", result)
+        self.assertNotIn("×", result)
+
+    def test_multiple(self):
+        result = _format_tool_entry("✓", "\033[0;32m", "Bash", 5)
+        self.assertIn("×5", result)
+
+    def test_no_count(self):
+        result = _format_tool_entry("↑", "\033[1;33m", "Agent")
+        self.assertIn("Agent", result)
+        self.assertNotIn("×", result)
+
+class TestFormatRecentCalls(unittest.TestCase):
+    def test_empty(self):
+        self.assertEqual(format_recent_calls([]), "")
+
+    def test_single_call(self):
+        calls = [{"name": "Bash", "summary": "ls -la"}]
+        result = format_recent_calls(calls)
+        self.assertIn("Bash", result)
+        self.assertIn("ls -la", result)
+
+    def test_multiple_calls_pipe_separated(self):
+        calls = [
+            {"name": "Bash", "summary": "ls -la"},
+            {"name": "Read", "summary": "/data/app/main.py"},
+        ]
+        result = format_recent_calls(calls)
+        self.assertIn("|", result)
+        self.assertIn("Bash", result)
+        self.assertIn("Read", result)
+
+    def test_short_name_used(self):
+        calls = [{"name": "WebSearch", "summary": "python async"}]
+        result = format_recent_calls(calls)
+        self.assertIn("Search", result)
+
+    def test_no_summary(self):
+        calls = [{"name": "Bash", "summary": "Bash"}]
+        result = format_recent_calls(calls)
+        self.assertIn("Bash", result)
+        # Should not duplicate name when summary equals name
+
+    def test_truncation_with_ellipsis(self):
+        calls = [{"name": "Bash", "summary": "x" * 100}]
+        result = format_recent_calls(calls)
+        # Strip ANSI
+        import re
+        plain = re.sub(r'\033\[[0-9;]*m', '', result)
+        self.assertIn("…", plain)
+        self.assertLessEqual(len(plain), 70)
+
+
+class TestResolveLayout(unittest.TestCase):
+    def test_default_when_no_config(self):
+        layout = resolve_layout(None)
+        self.assertEqual(layout["line1_order"], BLOCKS_LINE1)
+        self.assertTrue(layout["tools"])
+        self.assertTrue(layout["recent"])
+
+    def test_default_when_garbled(self):
+        # Wrong shape must fall back to defaults, never raise.
+        self.assertEqual(resolve_layout({"layout": "nope"})["line1_order"], BLOCKS_LINE1)
+        self.assertEqual(resolve_layout({"layout": {"line1_order": 123}})["line1_order"], BLOCKS_LINE1)
+
+    def test_hidden_omitted(self):
+        cfg = {"layout": {"line1_hidden": ["credits", "time"]}}
+        order = resolve_layout(cfg)["line1_order"]
+        self.assertNotIn("credits", order)
+        self.assertNotIn("time", order)
+
+    def test_reorder_then_auto_append(self):
+        # Only two blocks listed -> the rest auto-append in canonical order.
+        cfg = {"layout": {"line1_order": ["model", "credits"]}}
+        order = resolve_layout(cfg)["line1_order"]
+        self.assertEqual(order[0], "model")
+        self.assertEqual(order[1], "credits")
+        # All known blocks still present (auto-appended).
+        self.assertEqual(set(order), set(BLOCKS_LINE1))
+
+    def test_hidden_overrides_order(self):
+        # A block in both order and hidden must be excluded.
+        cfg = {"layout": {"line1_order": ["cwd_git", "credits"], "line1_hidden": ["credits"]}}
+        order = resolve_layout(cfg)["line1_order"]
+        self.assertNotIn("credits", order)
+        self.assertIn("cwd_git", order)
+
+    def test_unknown_id_ignored(self):
+        cfg = {"layout": {"line1_order": ["cwd_git", "bogus", "model"]}}
+        order = resolve_layout(cfg)["line1_order"]
+        self.assertNotIn("bogus", order)
+        self.assertEqual(order[0], "cwd_git")
+        self.assertEqual(order[1], "model")
+
+    def test_line_toggles_default_on(self):
+        cfg = {"layout": {"tools": False, "recent": False}}
+        layout = resolve_layout(cfg)
+        self.assertFalse(layout["tools"])
+        self.assertFalse(layout["recent"])
+
+
+class TestDisplayDirName(unittest.TestCase):
+    def test_normal_dir(self):
+        self.assertEqual(_display_dir_name("/home/user/myproject"), "myproject")
+
+    def test_trailing_slash(self):
+        self.assertEqual(_display_dir_name("/home/user/myproject/"), "myproject")
+
+    def test_codebuddy_worktree_shows_project_name(self):
+        path = "/Users/runzhi/.codebuddy/statusline/.codebuddy/worktrees/worktree"
+        self.assertEqual(_display_dir_name(path), "statusline")
+
+    def test_git_linked_worktree_absolute_gitdir(self):
+        # Simulate a git-linked worktree: .git is a file pointing at the
+        # main repo's .git/worktrees/<name>.
+        import tempfile
+        import textwrap
+        with tempfile.TemporaryDirectory() as d:
+            wt = os.path.join(d, "my-wt")
+            os.makedirs(wt)
+            with open(os.path.join(wt, ".git"), "w") as f:
+                f.write("gitdir: %s/myproject/.git/worktrees/my-wt\n"
+                        % d)
+            self.assertEqual(_display_dir_name(wt), "myproject")
+
+    def test_git_linked_worktree_relative_gitdir(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            # Layout: <d>/checkouts/<wt>  with .git pointing at
+            # ../myproject/.git/worktrees/<wt>
+            wt = os.path.join(d, "checkouts", "wt")
+            os.makedirs(wt)
+            with open(os.path.join(wt, ".git"), "w") as f:
+                f.write("gitdir: ../myproject/.git/worktrees/wt\n")
+            self.assertEqual(_display_dir_name(wt), "myproject")
+
+    def test_regular_git_repo_not_worktree(self):
+        # A normal repo has a .git *directory*, not a link file.
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            repo = os.path.join(d, "realproject")
+            os.makedirs(os.path.join(repo, ".git"))
+            self.assertEqual(_display_dir_name(repo), "realproject")
+
+    def test_empty(self):
+        self.assertEqual(_display_dir_name(""), "")
+        self.assertEqual(_display_dir_name(None), "")
+
+
+class TestRenderCwdGit(unittest.TestCase):
+    def _call(self, current_dir, git_info):
+        with mock.patch("render.get_git_info", return_value=git_info):
+            return _render_cwd_git({"workspace": {"current_dir": current_dir}}, {})
+
+    def test_worktree_shows_project_name_with_branch(self):
+        out = self._call(
+            "/Users/runzhi/.codebuddy/statusline/.codebuddy/worktrees/worktree",
+            {"branch": "main", "dirty": False, "ahead": 0, "behind": 0},
+        )
+        self.assertIn("statusline", out)
+        self.assertIn("main", out)
+
+    def test_normal_dir(self):
+        out = self._call(
+            "/home/user/myproject",
+            {"branch": "dev", "dirty": True, "ahead": 0, "behind": 0},
+        )
+        self.assertIn("myproject", out)
+        self.assertIn("dev", out)
+
+
+class TestBuildStatuslineConfig(unittest.TestCase):
+    def setUp(self):
+        import tempfile
+        self._tmp = tempfile.mkdtemp()
+        self._orig_plugin_data = stats._PLUGIN_DATA
+        stats._PLUGIN_DATA = self._tmp
+        # Pin the width so assertions never depend on the ambient terminal.
+        self._env = mock.patch.dict(os.environ, {"COLUMNS": "200"})
+        self._env.start()
+
+    def tearDown(self):
+        self._env.stop()
+        stats._PLUGIN_DATA = self._orig_plugin_data
+
+    def _write_config(self, layout):
+        with open(os.path.join(self._tmp, "config.json"), "w") as f:
+            json.dump({"layout": layout}, f)
+
+    def _sample(self):
+        inp = {
+            "model": {"display_name": "claude-sonnet"},
+            "cost": {"total_cost_usd": 0.02, "total_duration_ms": 65000,
+                     "total_api_duration_ms": 40000,
+                     "total_lines_added": 3, "total_lines_removed": 1},
+            "context_window": {"used_percentage": 12.5, "context_window_size": 200000,
+                              "current_usage": {"input_tokens": 25000}},
+        }
+        stats = {
+            "total_input": 3200, "total_output": 800, "total_cache_read": 1500,
+            "total_reasoning": 0, "total_credits": 0, "request_count": 5,
+            "tool_counts": {"Bash": 2, "Read": 1}, "running_agents": 0,
+            "compact_count": 0, "periodic_count": 0,
+            "recent_calls": [{"name": "Bash", "summary": "ls -la"}],
+            "last_input": 3200, "last_output": 800, "last_cache_read": 1500,
+            "last_credits": 0,
+        }
+        return inp, stats
+
+    def test_default_output_unchanged(self):
+        # No config file -> identical to the pre-config build.
+        inp, stats = self._sample()
+        out = build_statusline(inp, stats)
+        self.assertIn("claude-sonnet", out)
+        # No monetary amount is rendered on either host.
+        self.assertNotIn("$", out)
+        self.assertNotIn("¥", out)
+        # 800 output tokens / 40s API time -> 20.0 t/s
+        self.assertIn("20.0t/s", out)
+        self.assertIn("Tools:", out)
+        self.assertIn("Recent:", out)
+
+    def test_hidden_removes_from_output(self):
+        self._write_config({"line1_hidden": ["credits", "time"]})
+        inp, stats = self._sample()
+        out = build_statusline(inp, stats)
+        # credits value 0 here so weak signal; check 'Time:' absence instead.
+        self.assertNotIn("Time:", out)
+
+    def test_disable_lines(self):
+        self._write_config({"tools": False, "recent": False})
+        inp, stats = self._sample()
+        out = build_statusline(inp, stats)
+        self.assertNotIn("Tools:", out)
+        self.assertNotIn("Recent:", out)
+
+    def test_compact_periodic_own_slot(self):
+        # compact_periodic must render as its own " | "-separated block,
+        # not glued onto the previous segment (the pre-config behavior).
+        self._write_config({})
+        inp, stats = self._sample()
+        stats["compact_count"] = 1
+        stats["periodic_count"] = 2
+        out = re.sub(r'\033\[[0-9;]*m', '', build_statusline(inp, stats))
+        self.assertIn("| Compact×1", out)
+        self.assertIn("Compact×1 Periodic×2", out)
+
+    def test_compact_periodic_only_periodic_no_double_space(self):
+        # When only Periodic is present, the block must not gain a leading
+        # space (which would produce " |  Periodic" with a double space).
+        self._write_config({})
+        inp, stats = self._sample()
+        stats["compact_count"] = 0
+        stats["periodic_count"] = 1
+        out = re.sub(r'\033\[[0-9;]*m', '', build_statusline(inp, stats))
+        self.assertIn("| Periodic×1", out)
+        self.assertNotIn("|  Periodic", out)
+
+    def test_cache_total_hit_rate(self):
+        # tokens 块的 Cache 显示总命中率，与第三行格式一致。
+        # _sample(): total_input=3200, total_cache_read=1500 -> int(1500/3200*100)=46%
+        self._write_config({})
+        inp, stats = self._sample()
+        out = re.sub(r'\033\[[0-9;]*m', '', build_statusline(inp, stats))
+        self.assertIn("Cache:1.5K(46%)", out)
+
+
+class TestRenderContextBar(unittest.TestCase):
+    """Context bar fallbacks when model metadata is incomplete.
+
+    Models without max-context metadata (e.g. hy4-dev) report
+    context_window_size=0 / used_percentage=null while still reporting
+    current_usage.input_tokens. The block must still show something.
+    """
+
+    def _call(self, ctx):
+        return re.sub(r'\033\[[0-9;]*m', '',
+                      _render_context_bar({"context_window": ctx}, {}))
+
+    def test_no_max_context_shows_current_usage(self):
+        # hy4-dev case: no context_window_size, no used_percentage,
+        # but current_usage.input_tokens is present.
+        out = self._call({"used_percentage": None, "context_window_size": 0,
+                          "current_usage": {"input_tokens": 45678}})
+        self.assertEqual(out, "45.7K")
+
+    def test_no_max_context_with_used_percentage(self):
+        # used_percentage present but no max size: bar + pct + raw usage.
+        out = self._call({"used_percentage": 25, "context_window_size": 0,
+                          "current_usage": {"input_tokens": 45678}})
+        self.assertIn("25%", out)
+        self.assertIn("45.7K", out)
+        self.assertIn("█", out)
+
+    def test_bar_has_no_borders(self):
+        # '░' carries the track through to the end, so no opening '▕' or
+        # closing '▏' borders are drawn around the bar.
+        out = self._call({"used_percentage": 34, "context_window_size": 200000,
+                          "current_usage": {"input_tokens": 68000}})
+        self.assertIn("█", out)
+        self.assertNotIn("▕", out)
+        self.assertNotIn("▏", out)
+
+    def test_max_context_no_percentage_shows_both(self):
+        # No percentage, but max size known: show current/max.
+        out = self._call({"used_percentage": None, "context_window_size": 200000,
+                          "current_usage": {"input_tokens": 25000}})
+        self.assertIn("25.0K", out)
+        self.assertIn("Max:200.0K", out)
+
+    def test_max_context_only_unchanged(self):
+        # Pre-existing behavior: max known, no current usage -> "Max:" only.
+        out = self._call({"used_percentage": None, "context_window_size": 200000,
+                          "current_usage": None})
+        self.assertEqual(out, "Max:200.0K")
+
+    def test_full_data_shows_used_over_max(self):
+        out = self._call({"used_percentage": 12.5, "context_window_size": 200000,
+                          "current_usage": {"input_tokens": 25000}})
+        # 12.5% -> round() gives 12 (banker's rounding), not 13.
+        self.assertIn("12%", out)
+        self.assertIn("25.0K/200.0K", out)
+
+    def test_cache_heavy_usage_sums_all_parts(self):
+        # Cache-heavy session: input_tokens is the non-cached part and can be
+        # 0; the context length is the sum of input + cache_creation + cache_read.
+        out = self._call({"used_percentage": 4, "context_window_size": 1_000_000,
+                          "current_usage": {"input_tokens": 0,
+                                            "cache_creation_input_tokens": 2000,
+                                            "cache_read_input_tokens": 38000}})
+        self.assertIn("4%", out)
+        self.assertIn("40.0K/1.0M", out)
+
+    def test_size_and_pct_without_usage_shows_used_over_max(self):
+        # Model reports window size + percentage but omits
+        # current_usage.input_tokens: derive used count so the block reads
+        # `used/total` instead of only the ceiling.
+        out = self._call({"used_percentage": 4, "context_window_size": 1_000_000,
+                          "current_usage": None})
+        self.assertIn("4%", out)
+        self.assertIn("40.0K/1.0M", out)
+
+    def test_empty_context_window_renders_nothing(self):
+        # Nothing to show at all -> block suppressed (not a stray separator).
+        self.assertEqual(self._call({}), "")
+        self.assertEqual(self._call({"used_percentage": None,
+                                     "context_window_size": 0,
+                                     "current_usage": {}}), "")
+
+    def test_zero_tokens_renders_nothing(self):
+        # input_tokens=0 means "not reported", not "empty context".
+        self.assertEqual(self._call({"used_percentage": None,
+                                     "context_window_size": 0,
+                                     "current_usage": {"input_tokens": 0}}), "")
+
+    def test_null_context_window_renders_nothing(self):
+        self.assertEqual(_render_context_bar({"context_window": None}, {}), "")
+
+    def test_non_numeric_used_percentage_falls_back(self):
+        # A malformed host payload must not crash the statusline: treat a
+        # non-numeric used_percentage as absent and fall through.
+        out = self._call({"used_percentage": "abc", "context_window_size": 0,
+                          "current_usage": {"input_tokens": 5000}})
+        self.assertEqual(out, "5.0K")
+
+    def test_non_numeric_used_percentage_with_max(self):
+        out = self._call({"used_percentage": "abc", "context_window_size": 200000,
+                          "current_usage": {"input_tokens": 5000}})
+        self.assertIn("5.0K", out)
+        self.assertIn("Max:200.0K", out)
+
+
+class TestRenderSpeed(unittest.TestCase):
+    """Session-average throughput = total_output / cost.total_api_duration_ms.
+
+    The denominator must be the host's pure API time, never the wall-clock
+    total_duration_ms (tool runs and idle waits would deflate the rate).
+    Shown as `Avg:`; the recent delta is the line-3 `Speed:` item.
+    """
+
+    def _call(self, inp, st):
+        return re.sub(r'\033\[[0-9;]*m', '', _render_speed(inp, st))
+
+    def test_rate(self):
+        # 4000 tokens over 40s of API time -> 100.0 t/s
+        inp = {"cost": {"total_api_duration_ms": 40000}}
+        self.assertEqual(self._call(inp, {"total_output": 4000}), "Avg:100.0t/s")
+
+    def test_uses_api_duration_not_wall_clock(self):
+        # Same tokens, 40s API vs 200s wall -> must report 100.0, not 20.0.
+        inp = {"cost": {"total_api_duration_ms": 40000,
+                        "total_duration_ms": 200000}}
+        self.assertIn("Avg:100.0t/s", self._call(inp, {"total_output": 4000}))
+
+    def test_zero_api_duration_suppressed(self):
+        inp = {"cost": {"total_api_duration_ms": 0}}
+        self.assertEqual(self._call(inp, {"total_output": 4000}), "")
+
+    def test_zero_output_suppressed(self):
+        inp = {"cost": {"total_api_duration_ms": 4000}}
+        self.assertEqual(self._call(inp, {"total_output": 0}), "")
+
+    def test_missing_cost_suppressed(self):
+        self.assertEqual(self._call({}, {"total_output": 100}), "")
+
+    def test_null_cost_suppressed(self):
+        self.assertEqual(self._call({"cost": None}, {"total_output": 100}), "")
+
+    def test_wall_clock_only_suppressed(self):
+        # Only total_duration_ms present: must not fall back to it.
+        inp = {"cost": {"total_duration_ms": 30000}}
+        self.assertEqual(self._call(inp, {"total_output": 100}), "")
+
+    def test_null_api_duration_suppressed(self):
+        inp = {"cost": {"total_api_duration_ms": None}}
+        self.assertEqual(self._call(inp, {"total_output": 100}), "")
+
+
+class TestRecentRate(unittest.TestCase):
+    """Line-3 `Speed:` shows the recent delta rate passed in by the entry point."""
+
+    def _plain(self, parts):
+        return re.sub(r'\033\[[0-9;]*m', '', " ".join(parts))
+
+    def test_recent_rate_appended(self):
+        st = {"last_input": 1000, "last_output": 200}
+        self.assertIn("Speed:12.3t/s", self._plain(_build_recent_parts({}, st, 12.3)))
+
+    def test_none_omitted(self):
+        st = {"last_input": 1000, "last_output": 200}
+        self.assertNotIn("Speed:", self._plain(_build_recent_parts({}, st, None)))
+
+    def test_zero_rate_shown(self):
+        # A measured 0.0 t/s is still a measurement (not None) -> render it.
+        st = {"last_input": 1000, "last_output": 200}
+        self.assertIn("Speed:0.0t/s", self._plain(_build_recent_parts({}, st, 0.0)))
+
+
+if __name__ == "__main__":
+    unittest.main()

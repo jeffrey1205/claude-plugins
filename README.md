@@ -38,6 +38,7 @@ codex plugin add docs@cc-hub
 /plugin install golang-dev@cc-hub
 /plugin install coder@cc-hub
 /plugin install docs@cc-hub
+/plugin install statusline@cc-hub
 ```
 
 ## 插件列表
@@ -48,11 +49,11 @@ codex plugin add docs@cc-hub
 | [golang-dev](./plugins/golang-dev) | MCP Server + Skill | Go 开发工具集：gopls MCP 语义分析、MCP 编排工具、Rob Pike 的 Go Proverbs 编程哲学指导 |
 | [coder](./plugins/coder) | Skill | 编程大师思维工具集：Karpathy 编码指南 + Linus Torvalds 的代码品味与架构哲学 |
 | [rtk](./plugins/rtk) | Hook | CLI 输出过滤工具，减少 LLM token 消耗（节省 60-90%） |
-| [statusline](./plugins/statusline) | Command + Script | 自适应终端宽度的状态行插件，显示上下文窗口、Git、Token、Effort 等信息 |
+| [statusline](./plugins/statusline) | Command + Script | 双宿主状态行（CodeBuddy Code / Claude Code）：上下文进度、Git、Token、请求数、Credits、Effort |
 | [docs](./plugins/docs) | Skill | 写作辅助 Skill：基于 283 万字语料统计的去 AI 味改写，白名单式规则只改命中文字 |
 | [agents](./plugins/agents) | Agent | Claude Code 专用开发 agent 集：worker 实施已确认计划的代码修改，tester 负责 Go/Python 测试 |
 
-> codegraph / golang-dev / coder / docs 同时支持 Claude Code、Codex、CodeBuddy；rtk / statusline / agents 仅支持 Claude Code。
+> codegraph / golang-dev / coder / docs / statusline 同时支持 Claude Code 与 CodeBuddy；rtk / agents 仅支持 Claude Code。
 
 
 ## 目录结构
@@ -102,12 +103,15 @@ codex plugin add docs@cc-hub
     │   └── README.md
     ├── statusline/
     │   ├── .claude-plugin/
-    │   │   └── plugin.json   # 插件清单
-    │   ├── commands/
-    │   │   └── setup.md      # setup 命令
-    │   └── scripts/
-    │       ├── statusline.py       # 状态行脚本
-    │       └── setup-statusline.py # 配置脚本
+    │   │   └── plugin.json   # Claude Code 插件清单
+    │   ├── .codebuddy-plugin/
+    │   │   └── plugin.json   # CodeBuddy 插件清单
+    │   ├── commands/          # setup/config/cost-detail/uninstall
+    │   └── scripts/           # 入口、解析、渲染、setup 与测试
+    │       ├── statusline.py  # 入口（薄编排）
+    │       ├── parsing.py     # 双宿主 transcript 解析
+    │       ├── render.py      # 三行渲染 + 布局配置
+    │       └── tests/         # 297 个用例
     ├── docs/
     │   ├── .claude-plugin/
     │   │   └── plugin.json      # 插件清单

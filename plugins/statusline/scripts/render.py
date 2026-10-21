@@ -1,0 +1,523 @@
+#!/usr/bin/env python3
+"""Rendering: tool lists, recent calls, and the 3-line statusline assembly.
+
+build_statusline(input_data, stats_dict) assembles the full three-line output
+that statusline.py's main() previously built inline. Keeping it here keeps
+the entry point a thin orchestrator and groups all presentation logic.
+"""
+
+import json
+import os
+import re
+
+from formatting import (
+    BLUE,
+    CYAN,
+    DIM,
+    GREEN,
+    NC,
+    PURPLE,
+    RED,
+    YELLOW,
+    format_duration,
+    format_tokens,
+    get_statusline_width_from_input,
+    make_progress_bar,
+    truncate_to_width,
+)
+from gitinfo import format_git_info, get_git_info
+import stats
+
+
+# A CodeBuddy worktree lives at <project>/.codebuddy/worktrees/<name>; the leaf
+# is a generated name ("worktree") that is meaningless to the user.
+_CODEBUDDY_WORKTREE_RE = re.compile(r'^(?P<root>.+)/\.codebuddy/worktrees/[^/]+/?$')
+# A git-linked worktree's .git is a *file* containing
+# "gitdir: <mainrepo>/.git/worktrees/<name>".
+_GIT_WORKTREE_GITDIR_RE = re.compile(r'^(?P<root>.+?)/\.git/worktrees/[^/]+/?$')
+
+
+def _display_dir_name(cwd):
+    """Directory name to show for *cwd*.
+
+    Worktrees obscure the real project name. Resolve back to the main project
+    directory in either common case:
+      * CodeBuddy worktrees: <project>/.codebuddy/worktrees/<name>
+      * git-linked worktrees: a .git *file* pointing at
+        <mainrepo>/.git/worktrees/<name>
+    Otherwise fall back to the plain directory name.
+    """
+    if not cwd:
+        return ""
+    cwd = cwd.rstrip('/')
+    m = _CODEBUDDY_WORKTREE_RE.match(cwd)
+    if m:
+        return os.path.basename(m.group('root')) or ""
+    git_path = os.path.join(cwd, '.git')
+    if os.path.isfile(git_path):
+        try:
+            with open(git_path, 'r') as f:
+                content = f.read()
+        except OSError:
+            pass
+        else:
+            gm = re.search(r'gitdir:\s*(\S+)', content)
+            if gm:
+                gd = gm.group(1)
+                if not os.path.isabs(gd):
+                    gd = os.path.normpath(os.path.join(cwd, gd))
+                wm = _GIT_WORKTREE_GITDIR_RE.match(gd)
+                if wm:
+                    return os.path.basename(wm.group('root')) or ""
+    return os.path.basename(cwd) or ""
+
+
+# Tool display order and short names
+TOOL_ORDER = ["Bash", "Read", "Edit", "Write", "Glob", "Grep", "Agent", "WebFetch", "WebSearch"]
+TOOL_SHORT = {
+    "Bash": "Bash", "Read": "Read", "Edit": "Edit", "Write": "Write",
+    "Glob": "Glob", "Grep": "Grep", "Agent": "Agent",
+    "WebFetch": "Fetch", "WebSearch": "Search",
+}
+
+RECENT_CALLS_SUMMARY_LEN = 60
+
+
+# ---------------------------------------------------------------------------
+# Configurable layout
+#
+# The three-line statusline is assembled from discrete "blocks". A statusline-owned
+# config file (<config-dir>/plugins/data/statusline/config.json, where
+# config-dir = CODEBUDDY_CONFIG_DIR or ~/.codebuddy) decides which blocks are
+# shown, their order on line 1, and whether the Tools/Recent lines are enabled.
+# With no config file, BLOCKS_LINE1 is the default layout and the output is
+# identical to the pre-config build.
+# ---------------------------------------------------------------------------
+
+def _config_path():
+    """Location of the layout config, reusing the data dir (stats._PLUGIN_DATA)."""
+    return os.path.join(stats._PLUGIN_DATA, "config.json")
+
+
+def load_layout_config():
+    """Read the layout config JSON, or None if missing/invalid.
+
+    Any failure (missing file, bad JSON, wrong shape) returns None so the
+    caller falls back to the default layout — a broken config must never
+    blank the statusline.
+    """
+    try:
+        with open(_config_path(), 'r') as f:
+            data = json.load(f)
+    except (IOError, ValueError):  # ValueError covers json.JSONDecodeError
+        return None
+    if not isinstance(data, dict):
+        return None
+    return data
+
+
+def resolve_layout(cfg):
+    """Resolve the effective layout from a raw config dict.
+
+    Rules:
+      - line1_order: shown blocks, in this order.
+      - line1_hidden: explicitly hidden (takes precedence over order).
+      - any known block in neither list (e.g. added in a future release) is
+        auto-appended to the end and shown, so new blocks never silently
+        vanish for users with a custom config.
+      - unknown ids in line1_order are ignored.
+      - missing/garbled config -> built-in defaults (all shown, both lines on).
+    """
+    layout = cfg.get("layout", {}) if isinstance(cfg, dict) else {}
+    if not isinstance(layout, dict):
+        layout = {}
+
+    order = layout.get("line1_order", BLOCKS_LINE1)
+    if not isinstance(order, list):
+        order = BLOCKS_LINE1
+
+    hidden = layout.get("line1_hidden", [])
+    if not isinstance(hidden, list):
+        hidden = []
+    hidden = set(hidden)
+
+    # Drop unknown ids (typos / removed blocks).
+    order = [b for b in order if b in RENDERERS]
+
+    # Auto-append known blocks neither ordered nor hidden (new-block safety).
+    for b in BLOCKS_LINE1:
+        if b not in order and b not in hidden:
+            order.append(b)
+
+    # Hidden wins: never render a hidden block.
+    order = [b for b in order if b not in hidden]
+
+    tools = layout.get("tools", True)
+    recent = layout.get("recent", True)
+    return {
+        "line1_order": order,
+        "tools": bool(tools),
+        "recent": bool(recent),
+    }
+
+
+# --- Block renderers (line 1) ----------------------------------------------
+# Each returns the finished, colored string for its block, or "" when the
+# block has nothing to show.
+
+def _render_cwd_git(input_data, stats_dict):
+    workspace = input_data.get('workspace') or {}
+    git_cwd = workspace.get('current_dir') or os.getcwd()
+    cwd_name = _display_dir_name(git_cwd)
+    git_info = get_git_info(git_cwd)
+    git_part = format_git_info(git_info) if git_info else ""
+    parts = []
+    if cwd_name:
+        parts.append(f"{CYAN}{cwd_name}{NC}")
+    if git_part:
+        parts.append(git_part)
+    return " ".join(parts)
+
+
+def _render_model(input_data, stats_dict):
+    model = input_data.get('model') or {}
+    model_name = model.get('display_name', '')
+    return f"{BLUE}{model_name}{NC}" if model_name else ""
+
+
+def _render_effort(input_data, stats_dict):
+    """Reasoning effort level, when the host exposes one.
+
+    Claude Code sends effort.level (low/medium/high/xhigh/max) and omits the
+    key entirely for models without the parameter; CodeBuddy does not send it
+    at all. Rendering nothing when it is absent keeps the line clean.
+    """
+    effort = input_data.get('effort')
+    level = ''
+    if isinstance(effort, dict):
+        level = str(effort.get('level') or '').strip()[:12]
+    return (PURPLE + 'Effort:' + NC + level) if level else ''
+
+
+def _render_context_bar(input_data, stats_dict):
+    # used_percentage is always 0-100 (host computes it as
+    # Math.round(ratio * 1e4) / 100). Convert to a 0-1 ratio for the bar.
+    ctx = input_data.get('context_window') or {}
+    used_pct = ctx.get('used_percentage')
+    ctx_size = ctx.get('context_window_size', 0) or 0
+    current_usage = ctx.get('current_usage')
+    current_tokens = 0
+    if isinstance(current_usage, dict):
+        # The live context length is the sum of the non-overlapping parts of
+        # the latest request (plain input + cache write + cache read), per the
+        # host schema. input_tokens alone excludes cached tokens, so for a
+        # cache-heavy session it can be 0 even though the window is 4% full.
+        current_tokens = (
+            (current_usage.get('input_tokens', 0) or 0)
+            + (current_usage.get('cache_creation_input_tokens', 0) or 0)
+            + (current_usage.get('cache_read_input_tokens', 0) or 0)
+        )
+    # A malformed host payload may send a non-numeric used_percentage; treat
+    # it as "no percentage" and fall through to the size/usage fallbacks
+    # rather than raising (the statusline must never blank out).
+    if used_pct is not None:
+        try:
+            used_pct = used_pct / 100.0
+        except (TypeError, ValueError):
+            used_pct = None
+    if used_pct is not None:
+        # used_percentage is now the 0-1 ratio; clamp so a >100 value
+        # (possible mid-compaction) cannot overflow the bar.
+        pct = min(used_pct, 1.0)
+        bar, _ = make_progress_bar(pct, width=10)
+        pct_display = round(pct * 100)
+        # Some models report the window size and percentage but omit
+        # current_usage.input_tokens. Derive the used count from the ratio so
+        # the block still reads `used/total` instead of only the ceiling.
+        if current_tokens <= 0 and ctx_size > 0:
+            current_tokens = int(round(pct * ctx_size))
+        if ctx_size > 0 and current_tokens > 0:
+            ctx_str = f"{format_tokens(current_tokens)}/{format_tokens(ctx_size)}"
+        elif ctx_size > 0:
+            ctx_str = format_tokens(ctx_size)
+        elif current_tokens > 0:
+            # No max-context metadata (e.g. hy4-dev): show the current
+            # usage alone rather than dropping the block entirely.
+            ctx_str = format_tokens(current_tokens)
+        else:
+            ctx_str = ""
+        ctx_part = f"{bar} {DIM}{pct_display}%{NC}"
+        if ctx_str:
+            ctx_part += f" {DIM}{ctx_str}{NC}"
+        return ctx_part
+    if ctx_size > 0:
+        # No percentage data, but we still have max context size.
+        # Show current usage too when available, so the block stays useful
+        # instead of rendering only the ceiling.
+        if current_tokens > 0:
+            return (f"{DIM}{format_tokens(current_tokens)}{NC}"
+                    f"/{DIM}Max:{format_tokens(ctx_size)}{NC}")
+        return f"{DIM}Max:{format_tokens(ctx_size)}{NC}"
+    if current_tokens > 0:
+        # Neither percentage nor max context (model has no context_window
+        # metadata): fall back to the raw current context size, which is
+        # still reported in current_usage.input_tokens.
+        return f"{DIM}{format_tokens(current_tokens)}{NC}"
+    return ""
+
+
+def _render_compact_periodic(input_data, stats_dict):
+    # Compact/Periodic counts: always show when present, even if
+    # used_percentage is null (e.g. first call right after compact).
+    # Rendered as its own " | "-separated block (no leading space), so the
+    # parts join cleanly whether only Compact, only Periodic, or both show.
+    parts = []
+    if stats_dict.get('compact_count', 0) > 0:
+        parts.append(f"{YELLOW}Compact×{stats_dict['compact_count']}{NC}")
+    if stats_dict.get('periodic_count', 0) > 0:
+        parts.append(f"{DIM}Periodic×{stats_dict['periodic_count']}{NC}")
+    return " ".join(parts)
+
+
+def _render_tokens(input_data, stats_dict):
+    # In/Out come from transcript parsing (main + sub-agents),
+    # falling back to CodeBuddy's context_window values if transcript has no data.
+    # Cache/Think have no context_window fallback — they only come from transcript parsing.
+    ctx = input_data.get('context_window') or {}
+    display_in = stats_dict.get('total_input', 0) or ctx.get('total_input_tokens') or 0
+    display_out = stats_dict.get('total_output', 0) or ctx.get('total_output_tokens') or 0
+    display_cache = stats_dict.get('total_cache_read', 0)
+
+    token_parts = [
+        f"{GREEN}In:{NC}{format_tokens(display_in)}",
+        f"{GREEN}Out:{NC}{format_tokens(display_out)}",
+    ]
+    if display_cache > 0:
+        cache_pct = int(display_cache / display_in * 100) if display_in > 0 else 0
+        token_parts.append(f"{DIM}Cache:{NC}{format_tokens(display_cache)}({cache_pct}%)")
+    if stats_dict.get('total_reasoning', 0) > 0:
+        token_parts.append(f"{DIM}Think:{NC}{format_tokens(stats_dict['total_reasoning'])}")
+    return " ".join(token_parts)
+
+
+def _render_requests(input_data, stats_dict):
+    n = stats_dict.get('request_count', 0) or 0
+    return f"{CYAN}Req:{NC}{n}" if n > 0 else ""
+
+
+def _render_credits(input_data, stats_dict):
+    c = stats_dict.get('total_credits', 0) or 0
+    return f"{YELLOW}Credits:{NC}{c:.2f}" if c > 0 else ""
+
+
+def _render_time(input_data, stats_dict):
+    cost = input_data.get('cost') or {}
+    duration_str = format_duration(cost.get('total_duration_ms', 0) or 0)
+    return f"{DIM}Time:{NC}{duration_str}" if duration_str else ""
+
+
+def _render_speed(input_data, stats_dict):
+    """Session-average output throughput, in tokens per second.
+
+    Numerator is total output tokens (main + sub-agent transcripts).
+    Denominator is cost.total_api_duration_ms — the *pure model* time the
+    host tracks — NOT cost.total_duration_ms, which is wall-clock and
+    includes tool execution and idle waiting; dividing by it would badly
+    understate the rate. Labelled "Avg" because it averages the whole
+    session; the line-3 "Speed" item is the recent delta instead.
+
+    Caveat: total_api_duration_ms is host-side and may not include
+    sub-agent API time, while total_output does. So a sub-agent-heavy run
+    can read slightly high. It is still the closest available denominator.
+    """
+    cost = input_data.get('cost') or {}
+    api_ms = cost.get('total_api_duration_ms', 0) or 0
+    out = stats_dict.get('total_output', 0) or 0
+    if api_ms <= 0 or out <= 0:
+        return ""
+    rate = out / (api_ms / 1000.0)
+    return f"{PURPLE}Avg:{NC}{rate:.1f}t/s"
+
+
+def _render_lines(input_data, stats_dict):
+    cost = input_data.get('cost') or {}
+    added = cost.get('total_lines_added', 0) or 0
+    removed = cost.get('total_lines_removed', 0) or 0
+    if added > 0 or removed > 0:
+        return f"{GREEN}+{added}{NC}/{RED}-{removed}{NC}"
+    return ""
+
+
+RENDERERS = {
+    "cwd_git": _render_cwd_git,
+    "model": _render_model,
+    "effort": _render_effort,
+    "context_bar": _render_context_bar,
+    "compact_periodic": _render_compact_periodic,
+    "tokens": _render_tokens,
+    "requests": _render_requests,
+    "credits": _render_credits,
+    "time": _render_time,
+    "speed": _render_speed,
+    "lines": _render_lines,
+}
+
+# Canonical block order = default layout, and the auto-append order for new blocks.
+BLOCKS_LINE1 = list(RENDERERS.keys())
+
+
+def _build_recent_parts(input_data, stats_dict, recent_rate=None):
+    """Build line 3's Recent content (last-interaction detail + recent calls).
+
+    *recent_rate* is the recent output rate (tokens/s) computed by the entry
+    point from the delta between invocations; None when not yet measurable.
+    """
+    recent_parts = []
+
+    # 最近一次交互的 In/Out/Cache/Credits 详情
+    last_in = stats_dict.get('last_input', 0) or 0
+    last_out = stats_dict.get('last_output', 0) or 0
+    last_cache = stats_dict.get('last_cache_read', 0) or 0
+    last_credits = stats_dict.get('last_credits', 0) or 0
+    if last_in > 0 or last_out > 0:
+        last_parts = [
+            f"{GREEN}In:{NC}{format_tokens(last_in)}",
+            f"{GREEN}Out:{NC}{format_tokens(last_out)}",
+        ]
+        if last_cache > 0:
+            cache_pct = int(last_cache / last_in * 100) if last_in > 0 else 0
+            last_parts.append(f"{DIM}Cache:{NC}{format_tokens(last_cache)}({cache_pct}%)")
+        if last_credits > 0:
+            last_parts.append(f"{YELLOW}Credits:{NC}{last_credits:.2f}")
+        if recent_rate is not None:
+            last_parts.append(f"{PURPLE}Speed:{NC}{recent_rate:.1f}t/s")
+        recent_parts.append(" ".join(last_parts))
+
+    # Recent function calls with truncated content
+    recent_str = format_recent_calls(stats_dict.get('recent_calls', []))
+    if recent_str:
+        recent_parts.append(recent_str)
+
+    return recent_parts
+
+
+def _format_tool_entry(prefix, color, name, count=None):
+    """Format a single tool entry like '✓ Bash×3' or '↑ Agent'.
+
+    Count is shown only when > 1.
+    """
+    entry = f"{color}{prefix}{NC} {name}"
+    if count is not None and count > 1:
+        entry += f"{DIM}×{count}{NC}"
+    return entry
+
+
+def format_tools(tool_counts, running_agents=0):
+    """Format tool usage like: ✓ Bash×15 ✓ Read×2 ✓ Edit
+    Agent shows running count: ↑ Agent×2 or just ✓ Agent×3"""
+    if not tool_counts and running_agents == 0:
+        return ""
+
+    # Order: known tools first, then any others alphabetically
+    ordered = []
+    seen = set()
+    for name in TOOL_ORDER:
+        if name in tool_counts:
+            ordered.append((name, tool_counts[name]))
+            seen.add(name)
+    for name in sorted(tool_counts.keys()):
+        if name not in seen:
+            ordered.append((name, tool_counts[name]))
+
+    parts = []
+    for name, count in ordered:
+        short = TOOL_SHORT.get(name, name)
+        if name == 'Agent' and running_agents > 0:
+            parts.append(_format_tool_entry("↑", YELLOW, "Agent", running_agents))
+            completed = count - running_agents
+            if completed > 0:
+                parts.append(_format_tool_entry("✓", GREEN, "Agent", completed))
+        else:
+            parts.append(_format_tool_entry("✓", GREEN, short, count))
+
+    return " | ".join(parts)
+
+
+def format_recent_calls(recent_calls):
+    """Format the most recent function calls as line 3.
+
+    Each call shows: ToolName summary_text(truncated)
+    """
+    if not recent_calls:
+        return ""
+
+    parts = []
+    for call in reversed(recent_calls):
+        name = call.get('name', '')
+        summary = call.get('summary', '')
+        short = TOOL_SHORT.get(name, name)
+        if summary and summary != name:
+            # Truncate to RECENT_CALLS_SUMMARY_LEN visible columns (CJK-safe).
+            # Previously used len() which miscounts wide characters and can
+            # split ANSI escape sequences.
+            summary = truncate_to_width(summary, RECENT_CALLS_SUMMARY_LEN)
+            parts.append(f"{CYAN}{short}{NC} {DIM}{summary}{NC}")
+        else:
+            parts.append(f"{CYAN}{short}{NC}")
+    return " | ".join(parts)
+
+
+def build_statusline(input_data, stats_dict, recent_rate=None):
+    """Assemble the full three-line statusline output from the parsed stats.
+
+    Returns the string to print (already truncated to terminal width).
+    Null-safe: model/cost/context_window fields may be missing.
+
+    *recent_rate* (tokens/s, or None) is the delta-based recent throughput
+    shown on line 3; the entry point computes it because it needs the
+    previous invocation's counters.
+
+    The layout (which blocks show, their order, and whether the Tools/Recent
+    lines are enabled) comes from the plugin config; see load_layout_config /
+    resolve_layout. With no config, BLOCKS_LINE1 is used and the output is
+    identical to the pre-config build.
+    """
+    layout = resolve_layout(load_layout_config())
+
+    # Line 1: ordered, filtered blocks joined by " | ".
+    parts = []
+    for bid in layout["line1_order"]:
+        renderer = RENDERERS.get(bid)
+        if renderer is None:
+            continue
+        block = renderer(input_data, stats_dict)
+        if block:
+            parts.append(block)
+    output = " | ".join(parts)
+
+    # Line 2: Tools (with Agent running/completed status)
+    if layout["tools"]:
+        tool_str = format_tools(stats_dict.get('tool_counts', {}), stats_dict.get('running_agents', 0))
+        if tool_str:
+            output += f"\n{DIM}Tools:{NC} {tool_str}"
+
+    # Line 3: Last interaction token details + Recent function calls
+    if layout["recent"]:
+        recent_parts = _build_recent_parts(input_data, stats_dict, recent_rate)
+        if recent_parts:
+            output += f"\n{DIM}Recent:{NC} {' | '.join(recent_parts)}"
+
+    # Truncate each line to terminal width so the renderer never wraps
+    # a long line and visually squeezes the row below out of view.
+    # We leave a small slack so the rightmost column has breathing room.
+    # Width comes from the host's reported terminal_width (stdin JSON)
+    # with /dev/tty TIOCGWINSZ as fallback.
+    # If width is 0 (no TTY, no fallback), skip truncation entirely.
+    width = get_statusline_width_from_input(input_data)
+    if width > 0:
+        output = "\n".join(
+            truncate_to_width(line, max(20, width - 2))
+            for line in output.split("\n")
+        )
+
+    return output

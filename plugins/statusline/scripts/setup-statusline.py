@@ -1,63 +1,126 @@
 #!/usr/bin/env python3
-"""SessionStart hook：自动配置 statusline"""
+"""Write the statusLine command into the host settings.json.
 
+Runs from /statusline:setup. Works for both hosts: the target file is
+~/.codebuddy/settings.json or ~/.claude/settings.json, chosen from --host,
+the plugin-root environment variables, or where this script is installed.
+Idempotent: the same target changes nothing; after a plugin upgrade the
+versioned path changes and the command is rewritten.
+"""
+
+import argparse
 import json
 import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+import hostinfo
 
 
-def main():
-    home = os.path.expanduser('~')
-    plugin_root = os.environ.get('CLAUDE_PLUGIN_ROOT', '')
+def resolve_root(host, explicit=''):
+    """Plugin root: explicit > env > newest cached version > dev checkout."""
+    if explicit:
+        return os.path.abspath(explicit)
+    env_key = 'CLAUDE_PLUGIN_ROOT' if host == hostinfo.CLAUDE else 'CODEBUDDY_PLUGIN_ROOT'
+    env_root = os.environ.get(env_key) or ''
+    if env_root:
+        return os.path.abspath(env_root)
+    cached = hostinfo.newest_plugin_root(host)
+    if cached:
+        return cached
+    here = os.path.dirname(os.path.abspath(__file__))
+    dev = os.path.dirname(here)
+    if os.path.isfile(os.path.join(dev, 'scripts', 'statusline.py')):
+        return dev
+    if os.path.isfile(os.path.join(here, 'statusline.py')):
+        return os.path.dirname(here)
+    return ''
 
-    if not plugin_root:
-        # 优先使用插件市场缓存路径（包含版本号）
-        cache_dir = f"{home}/.claude/plugins/cache/cc-hub/statusline"
-        if os.path.exists(cache_dir):
-            versions = sorted(
-                [d for d in os.listdir(cache_dir) if os.path.isdir(os.path.join(cache_dir, d))],
-                reverse=True
-            )
-            if versions:
-                plugin_root = os.path.join(cache_dir, versions[0])
 
-        # 回退到开发路径
-        if not plugin_root:
-            script_dir = os.path.dirname(os.path.abspath(__file__))
-            dev_plugin_root = os.path.dirname(script_dir)
-            if os.path.exists(os.path.join(dev_plugin_root, 'scripts', 'statusline.py')):
-                plugin_root = dev_plugin_root
+def main(argv=None):
+    parser = argparse.ArgumentParser(description='Configure the statusline command')
+    parser.add_argument('--host', default='auto',
+                        choices=['auto'] + list(hostinfo.HOSTS))
+    parser.add_argument('--plugin-root', default='')
+    parser.add_argument('--check', action='store_true')
+    parser.add_argument('--force', action='store_true')
+    parser.add_argument('--json', action='store_true')
+    args = parser.parse_args(argv)
 
-    if not plugin_root:
-        print("statusline: 无法确定插件路径，跳过自动配置")
-        return
+    host = args.host if args.host != 'auto' else hostinfo.detect({})
+    root = resolve_root(host, args.plugin_root)
+    script = os.path.join(root, 'scripts', 'statusline.py') if root else ''
+    settings_path = hostinfo.settings_path(host)
 
-    statusline_script = os.path.join(plugin_root, 'scripts', 'statusline.py')
-    settings_path = os.path.join(home, '.claude', 'settings.json')
+    if not script or not os.path.isfile(script):
+        print('statusline: cannot find scripts/statusline.py (root=%r).' % root,
+              file=sys.stderr)
+        print('Reinstall the plugin, or pass --plugin-root <plugin dir>.',
+              file=sys.stderr)
+        return 2
 
-    # 直接读取，不存在则使用空配置
-    try:
-        with open(settings_path, 'r') as f:
-            settings = json.load(f)
-    except FileNotFoundError:
-        settings = {}
-    except json.JSONDecodeError:
-        print("statusline: settings.json 格式错误，跳过自动配置")
-        return
+    settings = hostinfo.load_settings(settings_path)
+    current = settings.get('statusLine')
+    if not isinstance(current, dict):
+        current = {}
+    current_command = current.get('command', '')
+    configured = hostinfo.same_target(current_command, script)
 
-    existing_cmd = settings.get('statusLine', {}).get('command', '')
-    if existing_cmd == statusline_script:
-        return
+    if args.check:
+        payload = {
+            'host': host,
+            'plugin_root': root,
+            'script': script,
+            'settings': settings_path,
+            'command': current_command,
+            'configured': configured,
+            'stale': bool(current_command) and not configured,
+        }
+        if args.json:
+            print(json.dumps(payload, ensure_ascii=False))
+        else:
+            print('host:       %s' % host)
+            print('plugin:     %s' % root)
+            print('settings:   %s' % settings_path)
+            print('configured: %s' % ('yes' if configured else 'no'))
+            if payload['stale']:
+                print('stale:      yes (statusLine points elsewhere; re-run setup)')
+        return 0 if configured else 1
 
-    settings['statusLine'] = {'type': 'command', 'command': statusline_script}
+    if configured:
+        if args.json:
+            print(json.dumps({'host': host, 'changed': False, 'script': script,
+                              'settings': settings_path}, ensure_ascii=False))
+        else:
+            print('statusline: already configured -> %s' % script)
+        return 0
 
-    try:
-        with open(settings_path, 'w') as f:
-            json.dump(settings, f, indent=2)
-            f.write('\n')
-        print(f"statusline: 已配置 statusLine -> {statusline_script}")
-    except IOError as e:
-        print(f"statusline: 无法写入 settings.json: {e}")
+    if current_command and 'statusline' not in current_command.lower() and not args.force:
+        print('statusline: %s already defines a different statusLine command:'
+              % settings_path, file=sys.stderr)
+        print('  %s' % current_command, file=sys.stderr)
+        print('Refusing to overwrite it. Re-run with --force to replace.',
+              file=sys.stderr)
+        return 2
+
+    command = hostinfo.build_command(sys.executable or 'python3', script)
+    padding = current.get('padding')
+    if not isinstance(padding, int):
+        padding = 0
+    settings['statusLine'] = {'type': 'command', 'command': command, 'padding': padding}
+    hostinfo.write_settings(settings_path, settings)
+
+    if args.json:
+        print(json.dumps({'host': host, 'changed': True, 'script': script,
+                          'settings': settings_path, 'command': command},
+                         ensure_ascii=False))
+    else:
+        print('statusline: configured %s' % settings_path)
+        print('  command: %s' % command)
+        print('Restart the session to see the new statusline.')
+    return 0
 
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())

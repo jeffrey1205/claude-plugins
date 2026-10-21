@@ -1,0 +1,1 @@
+{"type":"function_call","callId":"s1","name":"Read","arguments":"{\"file_path\":\"/tmp/b.py\"}","providerData":{"requestModelName":"Deepseek-V4.1-Flash","usage":{"requests":1,"inputTokens":50,"outputTokens":5},"rawUsage":{"credit":0.05}}}
