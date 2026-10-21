@@ -1,7 +1,7 @@
 {
   "name": "agents",
   "displayName": "Agents",
-  "description": "Claude Code 专用开发 agent 集：worker 负责实施已确认计划的代码修改，tester 负责检查、补充并运行 Go/Python 测试",
+  "description": "开发agent集：worker 负责实施已确认计划的代码修改，tester 负责检查、补充并运行 Go/Python 测试",
   "version": "1.0.0",
   "author": {
     "name": "Jeffrey"

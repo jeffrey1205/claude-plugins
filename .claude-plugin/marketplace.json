@@ -1,6 +1,6 @@
 {
   "name": "cc-hub",
-  "description": "个人 Claude Code 插件集合，包含 MCP 服务器、编程哲学 Skill、开发工具等扩展",
+  "description": "个人插件集合，包含 MCP 服务器、编程哲学 Skill、开发工具等扩展",
   "owner": {
     "name": "Jeffrey"
   },
@@ -66,7 +66,7 @@
     },
     {
       "name": "statusline",
-      "description": "双宿主状态行插件（CodeBuddy Code / Claude Code）：上下文进度、Git、Token、请求数、Credits、Effort",
+      "description": "状态行插件：上下文进度、Git、Token、请求数、Credits、Effort",
       "category": "productivity",
       "source": "./plugins/statusline",
       "homepage": "https://github.com/jeffrey1205/claude-plugins",
@@ -78,7 +78,7 @@
     },
     {
       "name": "docs",
-      "description": "写作辅助 Skill：基于 283 万字语料统计的去 AI 味改写工具，白名单式规则只改命中文字",
+      "description": "写作辅助 Skill：去AI味改写工具，白名单式规则只改命中文字",
       "category": "productivity",
       "source": "./plugins/docs",
       "homepage": "https://github.com/jeffrey1205/claude-plugins",
@@ -93,7 +93,7 @@
     },
     {
       "name": "agents",
-      "description": "Claude Code 专用开发 agent 集：worker 实施已确认计划的代码修改，tester 检查补充并运行 Go/Python 测试",
+      "description": "开发agent：worker 实施已确认计划的代码修改，tester 检查补充并运行 Go/Python 测试",
       "category": "development",
       "source": "./plugins/agents",
       "homepage": "https://github.com/jeffrey1205/claude-plugins",

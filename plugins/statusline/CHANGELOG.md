@@ -4,6 +4,14 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [SemVer](https://semver.org/lang/zh-CN/)。
 
+## [2.0.1] - 2026-10-21
+
+### 变更 (Changed)
+
+- **三行按类型重排**：第一行环境+上下文（目录/模型/effort/进度条/压缩），第二行累计用量（In/Out/Cache%/Req/Credits/Time/Avg/增删行），第三行活动（Tools + Recent + 最近调用）。line1_order 仍控制块顺序与显隐，但块归哪一行由类型决定。
+- **减少重复与冗余**：context_bar 只显示进度条+百分比+窗口上限；两处 Cache 只显示命中率；第三行 Recent 去掉与第二行重复的 Credits；移除 Think 展示。
+- **第三行按终端宽度分配调用摘要长度**：放不下时先缩短，再舍弃最旧一条，避免整行被截断成半句；多行命令压成单行。
+
 ## [2.0.0] - 2026-10-21
 
 合并 CodeBuddy 与 Claude Code 两套状态行，改为以 CodeBuddy 实现为基座的双宿主插件。
@@ -43,11 +51,18 @@
 - **tokens 块 Cache 显示总命中率**：第一行 Cache 从 `Cache:2.2M` 变为 `Cache:2.2M(74%)`（Cache/In 百分比，`int()` 向下截断），与第三行最近一次交互的格式对齐。纯展示改动，CACHE_VERSION 不变。
 - **无最大上下文元数据时回退显示当前用量**：部分模型（如 hy4-dev）没有最大上下文数据，`context_window_size=0` 且 `used_percentage` 为 null，此前 context_bar 整块消失。现在回退显示 `current_usage.input_tokens` 的当前用量，把「无比例」和「无数据」区分开。
 - **新增 `Avg` 块与第三行 `Speed`（输出 Token 速率）**：
-  - 第一行 `Avg:24.3t/s`：**会话累计平均** = 累计输出 Token ÷ 有效 API 时长。可作为块被 `hide`/`show`/`move`。
-  - 第三行 `Speed:24.3t/s`：**最近速率**，用跨轮差分（`ΔOut / Δ时间`）近似两次渲染之间的生成速率；无新输出时沿用上次值避免闪烁，首次调用/计数回退时不显示。
+  - 第二行 `Avg:24.3t/s`：**会话累计平均** = 累计输出 Token ÷ 有效 API 时长。可作为块被 `hide`/`show`/`move`。
+  - 第二行 `recent` 块内 `Speed:24.3t/s`：**最近速率**，用跨轮差分（`ΔOut / Δ时间`）近似两次渲染之间的生成速率；无新输出时沿用上次值避免闪烁，首次调用/计数回退时不显示。
   - 时间基准为宿主的**累计 API 时长**（`Δtotal_api_duration_ms`）。该值取自 `Date.now() - 请求发出时刻`，是**端到端请求耗时，含网络往返与首字节延迟 TTFT**（实测 ttft≈1.9s），因此 `Avg`/`Speed` 是**端到端输出吞吐**、低于模型实际生成速度；宿主未暴露「首字到末字」时长，无法算出纯生成速率。
   - **两个必要保护**（缺一会退回"永不显示"）：① 仅当 `Δoutput>0` 且 `Δapi>0` 才产出样本并推进基线，否则保留基线让增量**累积**——宿主时钟与 transcript 写入常在不同渲染里错峰到达；② 宿主累计值可能来自不同 `CostService` 实例而上下跳，故取**高水位**只增不减。
   - `output<=0` 或 `api_ms<=0` 的调用不写基线（否则下轮与 0 差分出整段累计值）。第一行 `Avg` = 累计输出 Token ÷ `cost.total_api_duration_ms`（宿主原值）；宿主未提供时不渲染。差分状态存于 `<session_id>.rate.json`（`v` 不符即 rebase），随缓存的 7 天清理回收。纯展示改动，`CACHE_VERSION` 不变。
+
+### 变更 (Changed)
+
+- **布局重排**：第一行追加 `Time:` 与 `Credits:`（Credits 排最后，为 0 不显示）；独立 `lines` 块移除，`+N/-M` 改拼在 `cwd_git` 的 git 段之后（空格连接，无 `|`）；第三行的 `Recent:` 段升级为第二行的 `recent` 块（位于 `tokens` 与 `speed` 之间），内容为最近一次交互的 `In/Out/Cache%` 与 `Speed:` 最近速率（速率不可测时不显示）。`recent` 同时仍是行开关：关闭时该块不渲染，第三行最近调用也一并隐藏。
+  - 新默认顺序：`cwd_git, model, effort, context_bar, compact_periodic, time, credits, requests, tokens, recent, speed`。
+  - 兼容性：旧配置中的 `lines`（含 `line1_hidden`）按未知 id 忽略，不会报错；`recent` 会自动追加到顺序末尾（`speed` 之后），建议执行一次 `/statusline:config reset` 应用新默认顺序。纯展示改动，`CACHE_VERSION` 不变（仍为 9）。
+- **运行时缓存目录改为 `<tmp>/codebuddy/statusline-<host>-<uid>/cache/`**：不再散落在临时目录根下（Unix 为 `/tmp/codebuddy/...`，Windows 为 `%TEMP%\codebuddy\...`）；`STATUSLINE_TMPDIR` 覆盖时同样追加 `codebuddy` 子目录。旧目录不自动迁移：首次渲染按新目录全量重解析一次后即恢复（速率快照随之重新基线，`Speed:` 可能晚一次渲染出现），旧的 `/tmp/statusline-*` 可手动删除。
 
 ### 修复 (Fixed)
 

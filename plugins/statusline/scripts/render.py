@@ -21,6 +21,7 @@ from formatting import (
     YELLOW,
     format_duration,
     format_tokens,
+    _visible_len,
     get_statusline_width_from_input,
     make_progress_bar,
     truncate_to_width,
@@ -80,7 +81,10 @@ TOOL_SHORT = {
     "WebFetch": "Fetch", "WebSearch": "Search",
 }
 
-RECENT_CALLS_SUMMARY_LEN = 60
+# One entry is "Tool summary..."; the cap covers the whole entry so the width
+# budget stays predictable (the tool-name prefix is part of it).
+RECENT_CALLS_ENTRY_MAX = 68
+RECENT_CALLS_ENTRY_MIN = 16
 
 
 # ---------------------------------------------------------------------------
@@ -89,7 +93,8 @@ RECENT_CALLS_SUMMARY_LEN = 60
 # The three-line statusline is assembled from discrete "blocks". A statusline-owned
 # config file (<config-dir>/plugins/data/statusline/config.json, where
 # config-dir = CODEBUDDY_CONFIG_DIR or ~/.codebuddy) decides which blocks are
-# shown, their order on line 1, and whether the Tools/Recent lines are enabled.
+# shown, their order on line 1, and whether the Tools line and the Recent
+# block are enabled.
 # With no config file, BLOCKS_LINE1 is the default layout and the output is
 # identical to the pre-config build.
 # ---------------------------------------------------------------------------
@@ -154,6 +159,10 @@ def resolve_layout(cfg):
 
     tools = layout.get("tools", True)
     recent = layout.get("recent", True)
+    # The 'recent' toggle gates the recent block exactly like 'hidden' does,
+    # so 'list' output and the render loop stay in sync with no special case.
+    if not recent:
+        order = [b for b in order if b != "recent"]
     return {
         "line1_order": order,
         "tools": bool(tools),
@@ -176,6 +185,13 @@ def _render_cwd_git(input_data, stats_dict):
         parts.append(f"{CYAN}{cwd_name}{NC}")
     if git_part:
         parts.append(git_part)
+    # Session line changes ride with the git segment (space-joined, no "|"),
+    # per the line-1 layout: "proj on  main* +26/-4 | model | ...".
+    cost = input_data.get('cost') or {}
+    added = cost.get('total_lines_added', 0) or 0
+    removed = cost.get('total_lines_removed', 0) or 0
+    if added > 0 or removed > 0:
+        parts.append(f"{GREEN}+{added}{NC}/{RED}-{removed}{NC}")
     return " ".join(parts)
 
 
@@ -199,71 +215,50 @@ def _render_effort(input_data, stats_dict):
     return (PURPLE + 'Effort:' + NC + level) if level else ''
 
 
+def _current_context_tokens(ctx):
+    """Live context length from the latest request (non-overlapping parts)."""
+    usage = ctx.get('current_usage')
+    if not isinstance(usage, dict):
+        return 0
+    return ((usage.get('input_tokens', 0) or 0)
+            + (usage.get('cache_creation_input_tokens', 0) or 0)
+            + (usage.get('cache_read_input_tokens', 0) or 0))
+
+
 def _render_context_bar(input_data, stats_dict):
-    # used_percentage is always 0-100 (host computes it as
-    # Math.round(ratio * 1e4) / 100). Convert to a 0-1 ratio for the bar.
+    """Bar + percentage + window ceiling, e.g. `██░░ 27% 1.0M`.
+
+    The used-token count is intentionally NOT repeated here: the Tokens block
+    already carries it, and showing `265.1K/1.0M` as well pushed line 1 past
+    the terminal width. used_percentage is 0-100 (host rounds to 2 dp), so it
+    is converted to a 0-1 ratio for the bar.
+    """
     ctx = input_data.get('context_window') or {}
     used_pct = ctx.get('used_percentage')
     ctx_size = ctx.get('context_window_size', 0) or 0
-    current_usage = ctx.get('current_usage')
-    current_tokens = 0
-    if isinstance(current_usage, dict):
-        # The live context length is the sum of the non-overlapping parts of
-        # the latest request (plain input + cache write + cache read), per the
-        # host schema. input_tokens alone excludes cached tokens, so for a
-        # cache-heavy session it can be 0 even though the window is 4% full.
-        current_tokens = (
-            (current_usage.get('input_tokens', 0) or 0)
-            + (current_usage.get('cache_creation_input_tokens', 0) or 0)
-            + (current_usage.get('cache_read_input_tokens', 0) or 0)
-        )
-    # A malformed host payload may send a non-numeric used_percentage; treat
-    # it as "no percentage" and fall through to the size/usage fallbacks
-    # rather than raising (the statusline must never blank out).
+
+    ratio = None
     if used_pct is not None:
         try:
-            used_pct = used_pct / 100.0
+            # Clamp so a >100 value (possible mid-compaction) cannot overflow.
+            ratio = min(used_pct / 100.0, 1.0)
         except (TypeError, ValueError):
-            used_pct = None
-    if used_pct is not None:
-        # used_percentage is now the 0-1 ratio; clamp so a >100 value
-        # (possible mid-compaction) cannot overflow the bar.
-        pct = min(used_pct, 1.0)
-        bar, _ = make_progress_bar(pct, width=10)
-        pct_display = round(pct * 100)
-        # Some models report the window size and percentage but omit
-        # current_usage.input_tokens. Derive the used count from the ratio so
-        # the block still reads `used/total` instead of only the ceiling.
-        if current_tokens <= 0 and ctx_size > 0:
-            current_tokens = int(round(pct * ctx_size))
-        if ctx_size > 0 and current_tokens > 0:
-            ctx_str = f"{format_tokens(current_tokens)}/{format_tokens(ctx_size)}"
-        elif ctx_size > 0:
-            ctx_str = format_tokens(ctx_size)
-        elif current_tokens > 0:
-            # No max-context metadata (e.g. hy4-dev): show the current
-            # usage alone rather than dropping the block entirely.
-            ctx_str = format_tokens(current_tokens)
-        else:
-            ctx_str = ""
-        ctx_part = f"{bar} {DIM}{pct_display}%{NC}"
-        if ctx_str:
-            ctx_part += f" {DIM}{ctx_str}{NC}"
-        return ctx_part
+            ratio = None
+
+    if ratio is not None:
+        bar, _ = make_progress_bar(ratio, width=10)
+        part = f"{bar} {DIM}{round(ratio * 100)}%{NC}"
+        if ctx_size > 0:
+            part += f" {DIM}{format_tokens(ctx_size)}{NC}"
+        return part
+
     if ctx_size > 0:
-        # No percentage data, but we still have max context size.
-        # Show current usage too when available, so the block stays useful
-        # instead of rendering only the ceiling.
-        if current_tokens > 0:
-            return (f"{DIM}{format_tokens(current_tokens)}{NC}"
-                    f"/{DIM}Max:{format_tokens(ctx_size)}{NC}")
         return f"{DIM}Max:{format_tokens(ctx_size)}{NC}"
-    if current_tokens > 0:
-        # Neither percentage nor max context (model has no context_window
-        # metadata): fall back to the raw current context size, which is
-        # still reported in current_usage.input_tokens.
-        return f"{DIM}{format_tokens(current_tokens)}{NC}"
-    return ""
+
+    # No ratio and no ceiling (some models omit the metadata): the raw current
+    # usage is still useful, so show it rather than dropping the block.
+    current = _current_context_tokens(ctx)
+    return f"{DIM}{format_tokens(current)}{NC}" if current > 0 else ""
 
 
 def _render_compact_periodic(input_data, stats_dict):
@@ -280,24 +275,25 @@ def _render_compact_periodic(input_data, stats_dict):
 
 
 def _render_tokens(input_data, stats_dict):
-    # In/Out come from transcript parsing (main + sub-agents),
-    # falling back to CodeBuddy's context_window values if transcript has no data.
-    # Cache/Think have no context_window fallback — they only come from transcript parsing.
+    """Session In/Out plus the cache hit ratio.
+
+    Cache is shown as a percentage only: the token count duplicates `In`
+    (cache reads are a subset of it) and made the line too wide. Reasoning
+    tokens (Think) are not rendered.
+    """
     ctx = input_data.get('context_window') or {}
     display_in = stats_dict.get('total_input', 0) or ctx.get('total_input_tokens') or 0
     display_out = stats_dict.get('total_output', 0) or ctx.get('total_output_tokens') or 0
-    display_cache = stats_dict.get('total_cache_read', 0)
+    display_cache = stats_dict.get('total_cache_read', 0) or 0
 
-    token_parts = [
+    parts = [
         f"{GREEN}In:{NC}{format_tokens(display_in)}",
         f"{GREEN}Out:{NC}{format_tokens(display_out)}",
     ]
-    if display_cache > 0:
-        cache_pct = int(display_cache / display_in * 100) if display_in > 0 else 0
-        token_parts.append(f"{DIM}Cache:{NC}{format_tokens(display_cache)}({cache_pct}%)")
-    if stats_dict.get('total_reasoning', 0) > 0:
-        token_parts.append(f"{DIM}Think:{NC}{format_tokens(stats_dict['total_reasoning'])}")
-    return " ".join(token_parts)
+    if display_cache > 0 and display_in > 0:
+        cache_pct = int(display_cache / display_in * 100)
+        parts.append(f"{DIM}Cache:{NC}{cache_pct}%")
+    return " ".join(parts)
 
 
 def _render_requests(input_data, stats_dict):
@@ -339,13 +335,31 @@ def _render_speed(input_data, stats_dict):
     return f"{PURPLE}Avg:{NC}{rate:.1f}t/s"
 
 
-def _render_lines(input_data, stats_dict):
-    cost = input_data.get('cost') or {}
-    added = cost.get('total_lines_added', 0) or 0
-    removed = cost.get('total_lines_removed', 0) or 0
-    if added > 0 or removed > 0:
-        return f"{GREEN}+{added}{NC}/{RED}-{removed}{NC}"
-    return ""
+def _render_recent(input_data, stats_dict):
+    """Line-2 'Recent:' block: tokens, cache ratio and speed of the last turn.
+
+    Credits are deliberately omitted: the cumulative Credits block already
+    shows them on line 1, and repeating them was pure duplication.
+
+    recent_rate (tokens/s or None) is injected into *stats_dict* by
+    build_statusline from the entry-point delta measurement; None (not yet
+    measurable) omits the Speed item.
+    """
+    last_in = stats_dict.get('last_input', 0) or 0
+    last_out = stats_dict.get('last_output', 0) or 0
+    last_cache = stats_dict.get('last_cache_read', 0) or 0
+    if last_in <= 0 and last_out <= 0:
+        return ""
+    parts = [
+        f"{GREEN}In:{NC}{format_tokens(last_in)}",
+        f"{GREEN}Out:{NC}{format_tokens(last_out)}",
+    ]
+    if last_cache > 0 and last_in > 0:
+        parts.append(f"{DIM}Cache:{NC}{int(last_cache / last_in * 100)}%")
+    recent_rate = stats_dict.get('recent_rate')
+    if recent_rate is not None:
+        parts.append(f"{PURPLE}Speed:{NC}{recent_rate:.1f}t/s")
+    return f"{DIM}Recent:{NC} " + " ".join(parts)
 
 
 RENDERERS = {
@@ -354,51 +368,16 @@ RENDERERS = {
     "effort": _render_effort,
     "context_bar": _render_context_bar,
     "compact_periodic": _render_compact_periodic,
-    "tokens": _render_tokens,
-    "requests": _render_requests,
-    "credits": _render_credits,
     "time": _render_time,
+    "credits": _render_credits,
+    "requests": _render_requests,
+    "tokens": _render_tokens,
+    "recent": _render_recent,
     "speed": _render_speed,
-    "lines": _render_lines,
 }
 
 # Canonical block order = default layout, and the auto-append order for new blocks.
 BLOCKS_LINE1 = list(RENDERERS.keys())
-
-
-def _build_recent_parts(input_data, stats_dict, recent_rate=None):
-    """Build line 3's Recent content (last-interaction detail + recent calls).
-
-    *recent_rate* is the recent output rate (tokens/s) computed by the entry
-    point from the delta between invocations; None when not yet measurable.
-    """
-    recent_parts = []
-
-    # 最近一次交互的 In/Out/Cache/Credits 详情
-    last_in = stats_dict.get('last_input', 0) or 0
-    last_out = stats_dict.get('last_output', 0) or 0
-    last_cache = stats_dict.get('last_cache_read', 0) or 0
-    last_credits = stats_dict.get('last_credits', 0) or 0
-    if last_in > 0 or last_out > 0:
-        last_parts = [
-            f"{GREEN}In:{NC}{format_tokens(last_in)}",
-            f"{GREEN}Out:{NC}{format_tokens(last_out)}",
-        ]
-        if last_cache > 0:
-            cache_pct = int(last_cache / last_in * 100) if last_in > 0 else 0
-            last_parts.append(f"{DIM}Cache:{NC}{format_tokens(last_cache)}({cache_pct}%)")
-        if last_credits > 0:
-            last_parts.append(f"{YELLOW}Credits:{NC}{last_credits:.2f}")
-        if recent_rate is not None:
-            last_parts.append(f"{PURPLE}Speed:{NC}{recent_rate:.1f}t/s")
-        recent_parts.append(" ".join(last_parts))
-
-    # Recent function calls with truncated content
-    recent_str = format_recent_calls(stats_dict.get('recent_calls', []))
-    if recent_str:
-        recent_parts.append(recent_str)
-
-    return recent_parts
 
 
 def _format_tool_entry(prefix, color, name, count=None):
@@ -443,7 +422,7 @@ def format_tools(tool_counts, running_agents=0):
     return " | ".join(parts)
 
 
-def format_recent_calls(recent_calls):
+def format_recent_calls(recent_calls, max_entry_len=RECENT_CALLS_ENTRY_MAX):
     """Format the most recent function calls as line 3.
 
     Each call shows: ToolName summary_text(truncated)
@@ -457,67 +436,122 @@ def format_recent_calls(recent_calls):
         summary = call.get('summary', '')
         short = TOOL_SHORT.get(name, name)
         if summary and summary != name:
-            # Truncate to RECENT_CALLS_SUMMARY_LEN visible columns (CJK-safe).
+            # A multi-line command would inject extra rows into the statusline;
+            # collapse all whitespace before truncating.
+            summary = ' '.join(str(summary).split())
+            # Truncate to max_summary visible columns (CJK-safe).
             # Previously used len() which miscounts wide characters and can
             # split ANSI escape sequences.
-            summary = truncate_to_width(summary, RECENT_CALLS_SUMMARY_LEN)
+            room = max(6, max_entry_len - _visible_len(short) - 1)
+            summary = truncate_to_width(summary, room)
             parts.append(f"{CYAN}{short}{NC} {DIM}{summary}{NC}")
         else:
             parts.append(f"{CYAN}{short}{NC}")
     return " | ".join(parts)
 
 
+# Blocks grouped by what they describe. Line 1 answers "where am I / what am
+# I talking to" plus the session clock (time, credits), line 2 is the session
+# totals with the last turn, line 3 is activity. The layout config still holds
+# ONE ordered block list; the group decides the row, so hide/show/move keep
+# working without a second ordering knob.
+LINE1_BLOCKS = frozenset(('cwd_git', 'model', 'effort', 'context_bar',
+                          'compact_periodic', 'time', 'credits'))
+LINE2_BLOCKS = frozenset(('requests', 'tokens', 'recent', 'speed'))
+
+
+
+def _recent_calls_layout(width, head_parts, count):
+    """Return (how many recent calls to show, per-call summary budget).
+
+    Recent calls used to be a fixed 60 columns each, which pushed line 3 far
+    past the terminal and truncated the last call anyway. Here the remaining
+    width is shared: all calls shrink together, and only when even the floor
+    does not fit do we drop the oldest ones (newest-first is more useful).
+    """
+    if width <= 0 or count <= 0:
+        return count, RECENT_CALLS_ENTRY_MAX
+
+    used = _visible_len(' | '.join(head_parts))
+    avail = (width - 2) - used - (3 if used else 0)
+    if avail <= 0:
+        return 0, 0
+
+    per_call = (avail - 3 * (count - 1)) // count
+    if per_call >= RECENT_CALLS_ENTRY_MIN:
+        return count, min(RECENT_CALLS_ENTRY_MAX, per_call)
+
+    fit = (avail + 3) // (RECENT_CALLS_ENTRY_MIN + 3)
+    return max(1, min(count, fit)), RECENT_CALLS_ENTRY_MIN
+
+
 def build_statusline(input_data, stats_dict, recent_rate=None):
-    """Assemble the full three-line statusline output from the parsed stats.
+    """Assemble the three-line statusline output from the parsed stats.
 
-    Returns the string to print (already truncated to terminal width).
-    Null-safe: model/cost/context_window fields may be missing.
+    Line 1: where/what + session clock — cwd+git (with line changes), model,
+    effort, context bar, compact count, time, credits.
+    Line 2: session totals + last turn — requests, tokens, recent, avg rate.
+    Line 3: activity — tool counts, most recent calls.
 
-    *recent_rate* (tokens/s, or None) is the delta-based recent throughput
-    shown on line 3; the entry point computes it because it needs the
-    previous invocation's counters.
+    The block list comes from the layout config (resolve_layout); each block
+    belongs to a fixed group, so custom order/hide still apply while the three
+    rows stay balanced. Null-safe: model/cost/context_window may be missing.
 
-    The layout (which blocks show, their order, and whether the Tools/Recent
-    lines are enabled) comes from the plugin config; see load_layout_config /
-    resolve_layout. With no config, BLOCKS_LINE1 is used and the output is
-    identical to the pre-config build.
+    *recent_rate* (tokens/s or None) is the delta-based recent throughput
+    shown inside the line-2 'recent' block; the entry point computes it from
+    the previous invocation.
     """
     layout = resolve_layout(load_layout_config())
+    width = get_statusline_width_from_input(input_data)
 
-    # Line 1: ordered, filtered blocks joined by " | ".
-    parts = []
-    for bid in layout["line1_order"]:
-        renderer = RENDERERS.get(bid)
+    # The recent block reads the entry-point-computed rate; inject it into a
+    # shallow copy so every renderer keeps the (input_data, stats_dict)
+    # signature and the caller's dict is never mutated.
+    stats_dict = dict(stats_dict)
+    stats_dict['recent_rate'] = recent_rate
+
+    line1 = []
+    line2 = []
+    for block_id in layout['line1_order']:
+        renderer = RENDERERS.get(block_id)
         if renderer is None:
             continue
         block = renderer(input_data, stats_dict)
-        if block:
-            parts.append(block)
-    output = " | ".join(parts)
+        if not block:
+            continue
+        if block_id in LINE1_BLOCKS:
+            line1.append(block)
+        elif block_id in LINE2_BLOCKS:
+            line2.append(block)
 
-    # Line 2: Tools (with Agent running/completed status)
-    if layout["tools"]:
-        tool_str = format_tools(stats_dict.get('tool_counts', {}), stats_dict.get('running_agents', 0))
+    # Line 3: tool counts and recent calls share one row (the Recent block
+    # moved to line 2).
+    activity = []
+    if layout['tools']:
+        tool_str = format_tools(stats_dict.get('tool_counts', {}),
+                                stats_dict.get('running_agents', 0))
         if tool_str:
-            output += f"\n{DIM}Tools:{NC} {tool_str}"
+            activity.append(f"{DIM}Tools:{NC} {tool_str}")
+    if layout['recent']:
+        calls = stats_dict.get('recent_calls') or []
+        if calls:
+            shown, budget = _recent_calls_layout(width, activity, len(calls))
+            # Keep the newest calls when the terminal is too narrow for all.
+            calls_str = format_recent_calls(calls[-shown:] if shown else [], budget)
+            if calls_str:
+                activity.append(calls_str)
 
-    # Line 3: Last interaction token details + Recent function calls
-    if layout["recent"]:
-        recent_parts = _build_recent_parts(input_data, stats_dict, recent_rate)
-        if recent_parts:
-            output += f"\n{DIM}Recent:{NC} {' | '.join(recent_parts)}"
+    lines = [' | '.join(line1), ' | '.join(line2), ' | '.join(activity)]
+    output = '\n'.join(line for line in lines if line)
 
-    # Truncate each line to terminal width so the renderer never wraps
-    # a long line and visually squeezes the row below out of view.
-    # We leave a small slack so the rightmost column has breathing room.
-    # Width comes from the host's reported terminal_width (stdin JSON)
-    # with /dev/tty TIOCGWINSZ as fallback.
-    # If width is 0 (no TTY, no fallback), skip truncation entirely.
-    width = get_statusline_width_from_input(input_data)
+    # Truncate each line to the terminal width so the renderer never wraps a
+    # line and squeezes the rows below out of view. Width comes from stdin
+    # (`terminal_width`, no host sends it yet), COLUMNS (Claude Code), or
+    # /dev/tty (CodeBuddy); 0 means no source, so skip truncation entirely.
     if width > 0:
-        output = "\n".join(
+        output = '\n'.join(
             truncate_to_width(line, max(20, width - 2))
-            for line in output.split("\n")
+            for line in output.split('\n')
         )
 
     return output

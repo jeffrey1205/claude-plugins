@@ -1,0 +1,15 @@
+{
+  "name": "agents",
+  "version": "1.0.0",
+  "description": "开发agent（CodeBuddy Code / Claude Code）：worker 实施已确认计划的代码修改，tester 检查补充并运行 Go/Python 测试",
+  "author": {
+    "name": "Jeffrey"
+  },
+  "homepage": "https://github.com/jeffrey1205/claude-plugins",
+  "license": "MIT",
+  "keywords": ["agent", "worker", "tester", "coding", "testing"],
+  "agents": [
+    "./agents/worker.md",
+    "./agents/tester.md"
+  ]
+}

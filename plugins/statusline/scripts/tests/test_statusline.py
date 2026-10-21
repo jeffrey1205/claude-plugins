@@ -240,3 +240,23 @@ class TestMainNullSafety(unittest.TestCase):
         plain = re.sub(r'\x1b\[[0-9;]*m', '', r.stdout)
         self.assertIn("+100", plain)
         self.assertIn("-30", plain)
+
+    def test_time_and_lines_on_first_line(self):
+        """End-to-end: Time: and +N/-M land on line 1 (layout v2)."""
+        r = self._run_main({
+            "cost": {"total_duration_ms": 1525000,
+                     "total_lines_added": 26, "total_lines_removed": 4},
+            "context_window": {"used_percentage": 5,
+                               "context_window_size": 1000000,
+                               "current_usage": {"input_tokens": 50000}},
+            "session_id": "line1-test",
+            "transcript_path": "",
+        })
+        self.assertEqual(r.returncode, 0, f"stdout={r.stdout}\nstderr={r.stderr}")
+        import re
+        plain = re.sub(r'\x1b\[[0-9;]*m', '', r.stdout)
+        first = plain.split("\n")[0]
+        self.assertIn("Time:25m25s", first)
+        self.assertIn("+26/-4", first)
+        self.assertIn("5%", first)
+        self.assertIn("1.0M", first)

@@ -75,6 +75,19 @@ class TestConfigHelper(unittest.TestCase):
         config_mod.main(["config.py", "reset"])
         self.assertFalse(os.path.exists(self._path))
 
+    def test_hide_recent_block(self):
+        # 'recent' is a regular block id now (line 2), hide/show-able.
+        config_mod.main(["config.py", "hide", "recent"])
+        self.assertIn("recent", self._read()["layout"]["line1_hidden"])
+        config_mod.main(["config.py", "show", "recent"])
+        self.assertNotIn("recent", self._read()["layout"]["line1_hidden"])
+
+    def test_hide_removed_lines_block_rejected(self):
+        # The 'lines' block was folded into cwd_git; the id is now unknown.
+        with self.assertRaises(SystemExit) as ctx:
+            config_mod.main(["config.py", "hide", "lines"])
+        self.assertEqual(ctx.exception.code, 2)
+
     def test_unknown_block_rejected(self):
         with self.assertRaises(SystemExit) as ctx:
             config_mod.main(["config.py", "hide", "bogus"])
@@ -102,7 +115,7 @@ class TestConfigHelper(unittest.TestCase):
             config_mod.main(["config.py", "list"])
         out = buf.getvalue()
         # 'time' must appear in the resolved order line and at the end of it.
-        line = [l for l in out.splitlines() if l.strip().startswith("line1 order:")][0]
+        line = [l for l in out.splitlines() if l.strip().startswith("block order:")][0]
         order = [b.strip() for b in line.split(":", 1)[1].strip().split("|")]
         self.assertIn("time", order)
         self.assertEqual(order[-1], "time")

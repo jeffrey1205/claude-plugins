@@ -10,7 +10,8 @@ Two different directories, on purpose:
 
 * The runtime cache (transcript offsets, rate snapshots, update marker) is
   disposable: losing it only forces one full reparse, so it goes to the
-  system temp dir (/tmp, %TEMP%) rather than cluttering the config dir.
+  system temp dir under a 'codebuddy' subdir (<tmp>/codebuddy, e.g.
+  /tmp/codebuddy) rather than cluttering the config dir or the temp root.
 * The layout config (render._config_path) must survive reboots and lives in
   the host's plugin data dir.
 """
@@ -31,10 +32,12 @@ _PLUGIN_DATA = hostinfo.data_dir(HOST)
 
 
 def _runtime_root(host):
-    """Disposable cache root: <tmp>/statusline-<host>-<uid>.
+    """Disposable cache root: <tmp>/codebuddy/statusline-<host>-<uid>.
 
     Per-host and per-user so concurrent CodeBuddy/Claude sessions (or two
-    users on one machine) never share offsets or rate snapshots.
+    users on one machine) never share offsets or rate snapshots. The
+    'codebuddy' subdir namespaces the plugin inside the shared temp root
+    (/tmp, %TEMP%) instead of littering its top level.
     """
     base = os.environ.get('STATUSLINE_TMPDIR') or tempfile.gettempdir()
     try:
@@ -42,7 +45,8 @@ def _runtime_root(host):
     except AttributeError:  # Windows
         uid = os.environ.get('USERNAME') or 'user'
     tag = 'claude' if host == hostinfo.CLAUDE else 'codebuddy'
-    return os.path.join(base, 'statusline-%s-%s' % (tag, uid.replace(os.sep, '_')))
+    return os.path.join(base, 'codebuddy',
+                        'statusline-%s-%s' % (tag, uid.replace(os.sep, '_')))
 
 
 CACHE_DIR = os.path.join(_runtime_root(HOST), 'cache')

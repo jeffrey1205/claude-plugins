@@ -1,6 +1,6 @@
 # Statusline
 
-CodeBuddy Code / Claude Code 通用的三行状态行：第一行概览，第二行工具调用，第三行最近一次交互与最近调用。
+CodeBuddy Code / Claude Code 通用的三行状态行：第一行环境与上下文（含会话时长与 Credits），第二行累计用量与最近一次交互，第三行工具调用与最近调用。
 
 - 以 CodeBuddy 的状态行实现为基座，同一份代码兼容 Claude Code 的 stdin 与 transcript 格式。
 - 增量解析 transcript（主 + 子 Agent），缓存放在系统临时目录，单次渲染约几十毫秒。
@@ -29,29 +29,29 @@ CodeBuddy Code / Claude Code 通用的三行状态行：第一行概览，第二
 ## 效果
 
 ```
-cwd on  main* | model | Effort:high | ████░░░░░░ 44% 56.7K/128.0K | Compact×2 | In:2.4M Out:10.7K Cache:2.2M(74%) | Req:29 | Credits:67.20 | Time:45s | Avg:24.3t/s | +156/-23
-Tools: ✓ Bash×15 | ✓ Read×2 | ✓ Edit | ↑ Agent ✓ Agent×2
-Recent: In:3.2K Out:856 Cache:2.1K(65%) Credits:1.50 Speed:24.3t/s | Bash apt-get install -y tmux | Read main.py | Edit config.yaml
+claude-plugins on  main* +26/-4 | Step-5-Preview | █░░░░░░░░░ 5% 1.0M | Time:25m25s | Credits:67.20
+Req:60 | In:2.1M Out:17.1K Cache:96% | Recent: In:51.5K Out:668 Cache:96% Speed:24.3t/s | Avg:11.6t/s
+Tools: ✓ REPL×56 | ✓ TaskCreate×4 | ✓ TaskUpdate×2 | REPL await Task…
 ```
 
-第一行由可配置的「块」组成（顺序、显隐均可调）：
+三行按**类型**分组：第一行「环境 + 上下文 + 会话信息」（目录/git/增删行、模型、effort、进度条、压缩、Time、Credits），第二行「累计用量 + 最近一次交互」（Req、In/Out/Cache%、Recent、Avg），第三行「活动」（Tools + 最近调用）。块仍可配置顺序与显隐：
 
 | 块 id | 内容 |
 |-------|------|
-| `cwd_git` | 目录名 + git 分支/脏标记/ahead-behind，worktree 会还原成主项目名 |
+| `cwd_git` | 目录名 + git 分支/脏标记/ahead-behind，worktree 会还原成主项目名；代码增删行数 `+N/-M` 拼在其后（空格连接，无 `|`） |
 | `model` | 模型显示名 |
 | `effort` | `effort.level`（仅 Claude Code 提供时显示） |
-| `context_bar` | 上下文进度条 + 百分比 + 已用/上限 |
+| `context_bar` | 上下文进度条 + 百分比 + 窗口上限（如 `██░░ 27% 1.0M`；已用量在 `tokens` 块里） |
 | `compact_periodic` | `Compact×N`（上下文压缩次数）、`Periodic×M`（阶段性摘要，仅 CodeBuddy） |
-| `tokens` | `In` / `Out` / `Cache(命中率)` / `Think` |
+| `time` | 会话耗时（`Time:`，第一行） |
+| `credits` | `Credits:` 累计计费 credits（为 0 不显示；第一行最后） |
 | `requests` | `Req:` API 请求次数 |
-| `credits` | `Credits:` 累计计费 credits（为 0 不显示） |
-| `time` | 会话耗时（`Time:`） |
-| `speed` | 会话平均输出吞吐 `Avg:`（累计 Out ÷ 累计 API 时长） |
-| `lines` | 代码增删行数 |
+| `tokens` | `In` / `Out` / `Cache:命中率`（Token 数已是 In 的子集，不重复显示；不显示 Think） |
+| `recent` | `Recent:` 最近一次交互的 In/Out/Cache 命中率与 `Speed:` 最近速率（速率不可测时不显示；第二行） |
+| `speed` | 会话平均输出吞吐 `Avg:`（累计 Out ÷ 累计 API 时长；第二行末） |
 
-第二行 `Tools:` 按固定顺序统计工具调用次数；`Agent` 区分运行中（`↑`）与已完成（`✓`）。
-第三行 `Recent:` 是最近一次交互的 Token 明细 + 最近 3 次工具调用摘要（CJK/ANSI 安全截断）。
+第三行 `Tools:` 按固定顺序统计工具调用次数，`Agent` 区分运行中（`↑`）与已完成（`✓`）；随后是最近 3 次工具调用摘要（CJK/ANSI 安全截断，多行命令压成一行）。
+宽度不够时先等比缩短每条调用摘要，仍放不下才舍弃最旧的调用，保证整行不折行、不被截断成半句。
 
 ## 双宿主字段支持
 
@@ -83,7 +83,7 @@ Recent: In:3.2K Out:856 Cache:2.1K(65%) Credits:1.50 Speed:24.3t/s | Bash apt-ge
 ```json
 {
   "layout": {
-    "line1_order": ["cwd_git", "model", "effort", "context_bar", "compact_periodic", "tokens", "requests", "credits", "time", "speed", "lines"],
+    "line1_order": ["cwd_git", "model", "effort", "context_bar", "compact_periodic", "time", "credits", "requests", "tokens", "recent", "speed"],
     "line1_hidden": [],
     "tools": true,
     "recent": true
@@ -91,8 +91,8 @@ Recent: In:3.2K Out:856 Cache:2.1K(65%) Credits:1.50 Speed:24.3t/s | Bash apt-ge
 }
 ```
 
-- `line1_order`：第一行块的顺序；`line1_hidden`：隐藏指定块（优先级高于顺序）。
-- `tools` / `recent`：第二、三行的整行开关。
+- `line1_order`：块的顺序（按类型自动分到三行内，见上表）；`line1_hidden`：隐藏指定块（优先级高于顺序）。
+- `tools`：第三行 `Tools:` 段开关；`recent`：第二行 `Recent:` 块开关（同时控制第三行最近调用）。
 - 新版本新增的块若未出现在配置里，会自动追加到末尾显示；要隐藏必须写进 `line1_hidden`。
 - 配置损坏时回退默认布局，不会让状态行变空白；修改后下一次刷新即生效。
 
@@ -111,9 +111,9 @@ Recent: In:3.2K Out:856 Cache:2.1K(65%) Credits:1.50 Speed:24.3t/s | Bash apt-ge
 
 ## 临时文件
 
-- 运行时缓存（transcript 偏移、最近速率快照、更新标记）放在系统临时目录：`<tmp>/statusline-<host>-<uid>/cache/`，Unix 上是 `/tmp/statusline-codebuddy-1000/cache`，Windows 上是 `%TEMP%`。目录权限 0700，7 天自动清理。
+- 运行时缓存（transcript 偏移、最近速率快照、更新标记）放在系统临时目录的 `codebuddy` 子目录下：`<tmp>/codebuddy/statusline-<host>-<uid>/cache/`，Unix 上是 `/tmp/codebuddy/statusline-codebuddy-1000/cache`，Windows 上是 `%TEMP%\codebuddy`。目录权限 0700，7 天自动清理。
 - 布局配置是持久数据，留在 `<config>/plugins/data/statusline/config.json`。
-- 临时目录丢失只会触发一次全量重解析，不影响结果正确性。
+- 临时目录丢失只会触发一次全量重解析，不影响结果正确性；从旧路径（`/tmp/statusline-*`）升级后旧目录不自动迁移，可手动删除。
 
 ## 详细报告
 
@@ -135,7 +135,7 @@ Recent: In:3.2K Out:856 Cache:2.1K(65%) Credits:1.50 Speed:24.3t/s | Bash apt-ge
 
 1. **旧 git-clone 版**（`~/.codebuddy/statusline/`）：先跑 `bash ~/.codebuddy/statusline/uninstall.sh`，否则它的 `statusLine` 命令仍会优先生效；再按上面的方式安装插件并执行 `/statusline:setup`。
 2. **旧 Claude 单文件插件（1.0.4）**：升级后重跑 `/statusline:setup`，会把命令从 `.../statusline/1.0.4/scripts/statusline.py` 改到新版本目录。
-3. 布局配置路径不变（`plugins/data/statusline/config.json`），块 id 除 `cost` 外保持兼容。
+3. 布局配置路径不变（`plugins/data/statusline/config.json`），块 id 除 `cost`、`lines` 外保持兼容：`lines` 已折叠进 `cwd_git`（旧配置里的 `lines` 按未知 id 忽略，不报错）；`recent` 是新块 id，旧配置会自动把它追加到顺序末尾，建议执行一次 `/statusline:config reset` 应用新默认顺序。
 
 ## 测试
 

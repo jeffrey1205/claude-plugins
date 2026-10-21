@@ -8,7 +8,7 @@ Subcommands:
 
     hide   <block>...          add block(s) to line1_hidden
     show   <block>...          remove block(s) from line1_hidden
-    move   <block> front|end   reorder line1_order
+    move   <block> front|end   reorder the block list
     move   <block> after <other>
     move   <block> before <other>
     enable  tools|recent        set a whole-line toggle on
@@ -102,7 +102,7 @@ def _move(layout, block, where, other=None):
 def _print_layout(layout):
     resolved = resolve_layout({"layout": layout})
     print("Layout (effective):")
-    print("  line1 order: " + " | ".join(resolved["line1_order"]))
+    print("  block order: " + " | ".join(resolved["line1_order"]))
     print("  hidden:      " + (", ".join(layout["line1_hidden"]) or "(none)"))
     print("  tools:       " + ("on" if resolved["tools"] else "off"))
     print("  recent:      " + ("on" if resolved["recent"] else "off"))

@@ -18,7 +18,7 @@ from render import (
     format_recent_calls,
     format_tools,
     resolve_layout,
-    _build_recent_parts,
+    _render_recent,
     _display_dir_name,
     _format_tool_entry,
     _render_cwd_git,
@@ -159,6 +159,38 @@ class TestResolveLayout(unittest.TestCase):
         self.assertEqual(order[0], "cwd_git")
         self.assertEqual(order[1], "model")
 
+    def test_recent_in_default_order(self):
+        # 'recent' is a regular block now (line 2), between tokens and speed.
+        order = resolve_layout(None)["line1_order"]
+        self.assertIn("recent", order)
+        self.assertLess(order.index("tokens"), order.index("recent"))
+        self.assertLess(order.index("recent"), order.index("speed"))
+
+    def test_recent_toggle_off_drops_block(self):
+        layout = resolve_layout({"layout": {"recent": False}})
+        self.assertNotIn("recent", layout["line1_order"])
+        self.assertFalse(layout["recent"])
+
+    def test_hide_recent_block(self):
+        cfg = {"layout": {"line1_hidden": ["recent"]}}
+        self.assertNotIn("recent", resolve_layout(cfg)["line1_order"])
+
+    def test_legacy_lines_id_ignored(self):
+        # Old configs referencing the removed 'lines' block: dropped, no error.
+        cfg = {"layout": {"line1_order": ["cwd_git", "lines"],
+                          "line1_hidden": ["lines"]}}
+        order = resolve_layout(cfg)["line1_order"]
+        self.assertNotIn("lines", order)
+        self.assertEqual(set(order), set(BLOCKS_LINE1))
+
+    def test_legacy_order_appends_recent_at_end(self):
+        # A pre-recent config keeps its order; 'recent' auto-appends at the end.
+        legacy = ["cwd_git", "model", "effort", "context_bar",
+                  "compact_periodic", "tokens", "requests", "credits",
+                  "time", "speed"]
+        order = resolve_layout({"layout": {"line1_order": legacy}})["line1_order"]
+        self.assertEqual(order[-1], "recent")
+
     def test_line_toggles_default_on(self):
         cfg = {"layout": {"tools": False, "recent": False}}
         layout = resolve_layout(cfg)
@@ -236,6 +268,47 @@ class TestRenderCwdGit(unittest.TestCase):
         self.assertIn("dev", out)
 
 
+class TestRenderCwdGitLines(unittest.TestCase):
+    """+N/-M is folded into the cwd_git block (space-joined, no '|')."""
+
+    def _call(self, current_dir, git_info, cost):
+        inp = {"workspace": {"current_dir": current_dir}, "cost": cost}
+        with mock.patch("render.get_git_info", return_value=git_info):
+            return re.sub(r'\033\[[0-9;]*m', '', _render_cwd_git(inp, {}))
+
+    def test_glued_after_git_part(self):
+        out = self._call(
+            "/home/user/myproject",
+            {"branch": "main", "dirty": False, "ahead": 0, "behind": 0},
+            {"total_lines_added": 26, "total_lines_removed": 4},
+        )
+        self.assertIn("myproject on", out)
+        self.assertTrue(out.endswith("+26/-4"))
+        self.assertNotIn("|", out)
+
+    def test_no_git_still_glued(self):
+        out = self._call("/home/user/myproject", None,
+                         {"total_lines_added": 3, "total_lines_removed": 1})
+        self.assertEqual(out, "myproject +3/-1")
+
+    def test_zero_lines_suppressed(self):
+        out = self._call(
+            "/home/user/myproject",
+            {"branch": "main", "dirty": False, "ahead": 0, "behind": 0}, {})
+        self.assertNotIn("+", out)
+        self.assertNotIn("/-", out)
+
+    def test_only_added_shows_both(self):
+        # Old 'lines' semantics: whenever either side is >0 both numbers show.
+        out = self._call("/home/user/myproject", None,
+                         {"total_lines_added": 3, "total_lines_removed": 0})
+        self.assertTrue(out.endswith("+3/-0"))
+
+    def test_missing_cost_safe(self):
+        out = self._call("/home/user/myproject", None, None)
+        self.assertEqual(out, "myproject")
+
+
 class TestBuildStatuslineConfig(unittest.TestCase):
     def setUp(self):
         import tempfile
@@ -286,6 +359,10 @@ class TestBuildStatuslineConfig(unittest.TestCase):
         self.assertIn("20.0t/s", out)
         self.assertIn("Tools:", out)
         self.assertIn("Recent:", out)
+        # 65s wall clock -> Time on line 1 (strip ANSI: the reset sits
+        # between the "Time:" label and the value).
+        plain = re.sub(r'\033\[[0-9;]*m', '', out)
+        self.assertIn("Time:1m5s", plain)
 
     def test_hidden_removes_from_output(self):
         self._write_config({"line1_hidden": ["credits", "time"]})
@@ -300,6 +377,8 @@ class TestBuildStatuslineConfig(unittest.TestCase):
         out = build_statusline(inp, stats)
         self.assertNotIn("Tools:", out)
         self.assertNotIn("Recent:", out)
+        # The recent toggle also gates the line-3 recent calls (unchanged).
+        self.assertNotIn("ls -la", out)
 
     def test_compact_periodic_own_slot(self):
         # compact_periodic must render as its own " | "-separated block,
@@ -329,7 +408,7 @@ class TestBuildStatuslineConfig(unittest.TestCase):
         self._write_config({})
         inp, stats = self._sample()
         out = re.sub(r'\033\[[0-9;]*m', '', build_statusline(inp, stats))
-        self.assertIn("Cache:1.5K(46%)", out)
+        self.assertIn("Cache:46%", out)
 
 
 class TestRenderContextBar(unittest.TestCase):
@@ -352,11 +431,11 @@ class TestRenderContextBar(unittest.TestCase):
         self.assertEqual(out, "45.7K")
 
     def test_no_max_context_with_used_percentage(self):
-        # used_percentage present but no max size: bar + pct + raw usage.
+        # used_percentage present but no max size: bar + pct, no used count.
         out = self._call({"used_percentage": 25, "context_window_size": 0,
                           "current_usage": {"input_tokens": 45678}})
         self.assertIn("25%", out)
-        self.assertIn("45.7K", out)
+        self.assertNotIn("45.7K", out)
         self.assertIn("█", out)
 
     def test_bar_has_no_borders(self):
@@ -368,12 +447,12 @@ class TestRenderContextBar(unittest.TestCase):
         self.assertNotIn("▕", out)
         self.assertNotIn("▏", out)
 
-    def test_max_context_no_percentage_shows_both(self):
-        # No percentage, but max size known: show current/max.
+    def test_max_context_no_percentage_shows_ceiling(self):
+        # No percentage, but max size known: the ceiling is enough; the used
+        # count is already in the Tokens block and would only add width.
         out = self._call({"used_percentage": None, "context_window_size": 200000,
                           "current_usage": {"input_tokens": 25000}})
-        self.assertIn("25.0K", out)
-        self.assertIn("Max:200.0K", out)
+        self.assertEqual(out, "Max:200.0K")
 
     def test_max_context_only_unchanged(self):
         # Pre-existing behavior: max known, no current usage -> "Max:" only.
@@ -381,12 +460,14 @@ class TestRenderContextBar(unittest.TestCase):
                           "current_usage": None})
         self.assertEqual(out, "Max:200.0K")
 
-    def test_full_data_shows_used_over_max(self):
+    def test_full_data_shows_pct_and_ceiling(self):
         out = self._call({"used_percentage": 12.5, "context_window_size": 200000,
                           "current_usage": {"input_tokens": 25000}})
         # 12.5% -> round() gives 12 (banker's rounding), not 13.
         self.assertIn("12%", out)
-        self.assertIn("25.0K/200.0K", out)
+        self.assertIn("200.0K", out)
+        # Used tokens are the Tokens block's job; repeating them here overflowed.
+        self.assertNotIn("25.0K/", out)
 
     def test_cache_heavy_usage_sums_all_parts(self):
         # Cache-heavy session: input_tokens is the non-cached part and can be
@@ -396,16 +477,17 @@ class TestRenderContextBar(unittest.TestCase):
                                             "cache_creation_input_tokens": 2000,
                                             "cache_read_input_tokens": 38000}})
         self.assertIn("4%", out)
-        self.assertIn("40.0K/1.0M", out)
+        self.assertIn("1.0M", out)
+        self.assertNotIn("40.0K", out)
 
-    def test_size_and_pct_without_usage_shows_used_over_max(self):
+    def test_size_and_pct_without_usage_shows_ceiling(self):
         # Model reports window size + percentage but omits
         # current_usage.input_tokens: derive used count so the block reads
         # `used/total` instead of only the ceiling.
         out = self._call({"used_percentage": 4, "context_window_size": 1_000_000,
                           "current_usage": None})
         self.assertIn("4%", out)
-        self.assertIn("40.0K/1.0M", out)
+        self.assertIn("1.0M", out)
 
     def test_empty_context_window_renders_nothing(self):
         # Nothing to show at all -> block suppressed (not a stray separator).
@@ -433,8 +515,7 @@ class TestRenderContextBar(unittest.TestCase):
     def test_non_numeric_used_percentage_with_max(self):
         out = self._call({"used_percentage": "abc", "context_window_size": 200000,
                           "current_usage": {"input_tokens": 5000}})
-        self.assertIn("5.0K", out)
-        self.assertIn("Max:200.0K", out)
+        self.assertEqual(out, "Max:200.0K")
 
 
 class TestRenderSpeed(unittest.TestCase):
@@ -442,7 +523,8 @@ class TestRenderSpeed(unittest.TestCase):
 
     The denominator must be the host's pure API time, never the wall-clock
     total_duration_ms (tool runs and idle waits would deflate the rate).
-    Shown as `Avg:`; the recent delta is the line-3 `Speed:` item.
+    Shown as `Avg:` on line 2; the recent delta is the `Speed:` item inside
+    the line-2 `recent` block.
     """
 
     def _call(self, inp, st):
@@ -483,24 +565,163 @@ class TestRenderSpeed(unittest.TestCase):
         self.assertEqual(self._call(inp, {"total_output": 100}), "")
 
 
-class TestRecentRate(unittest.TestCase):
-    """Line-3 `Speed:` shows the recent delta rate passed in by the entry point."""
+class TestRenderRecent(unittest.TestCase):
+    """The 'recent' block: last-turn In/Out/Cache% and Speed (recent rate)."""
 
-    def _plain(self, parts):
-        return re.sub(r'\033\[[0-9;]*m', '', " ".join(parts))
+    def _call(self, st, recent_rate=None):
+        st = dict(st)
+        st['recent_rate'] = recent_rate
+        return re.sub(r'\033\[[0-9;]*m', '', _render_recent({}, st))
 
-    def test_recent_rate_appended(self):
-        st = {"last_input": 1000, "last_output": 200}
-        self.assertIn("Speed:12.3t/s", self._plain(_build_recent_parts({}, st, 12.3)))
+    def test_full(self):
+        out = self._call({"last_input": 1000, "last_output": 200,
+                          "last_cache_read": 500}, 12.3)
+        self.assertEqual(out, "Recent: In:1.0K Out:200 Cache:50% Speed:12.3t/s")
 
-    def test_none_omitted(self):
-        st = {"last_input": 1000, "last_output": 200}
-        self.assertNotIn("Speed:", self._plain(_build_recent_parts({}, st, None)))
+    def test_rate_none_omitted(self):
+        out = self._call({"last_input": 1000, "last_output": 200}, None)
+        self.assertEqual(out, "Recent: In:1.0K Out:200")
 
     def test_zero_rate_shown(self):
         # A measured 0.0 t/s is still a measurement (not None) -> render it.
-        st = {"last_input": 1000, "last_output": 200}
-        self.assertIn("Speed:0.0t/s", self._plain(_build_recent_parts({}, st, 0.0)))
+        out = self._call({"last_input": 1000, "last_output": 200}, 0.0)
+        self.assertIn("Speed:0.0t/s", out)
+
+    def test_no_cache_key_omits_cache(self):
+        out = self._call({"last_input": 1000, "last_output": 200,
+                          "last_cache_read": 0})
+        self.assertNotIn("Cache:", out)
+
+    def test_no_last_tokens_suppressed(self):
+        self.assertEqual(self._call({}), "")
+        self.assertEqual(self._call({"last_input": 0, "last_output": 0}), "")
+
+
+
+class TestLineGrouping(unittest.TestCase):
+    """Three semantic rows: environment+context / totals / activity."""
+
+    def setUp(self):
+        import tempfile
+        self._tmp = tempfile.mkdtemp()
+        self._orig = stats._PLUGIN_DATA
+        stats._PLUGIN_DATA = self._tmp
+        self._env = mock.patch.dict(os.environ, {"COLUMNS": "200"})
+        self._env.start()
+
+    def tearDown(self):
+        self._env.stop()
+        stats._PLUGIN_DATA = self._orig
+
+    def _st(self):
+        return {
+            "total_input": 3200, "total_output": 800, "total_cache_read": 1500,
+            "total_reasoning": 5000, "total_credits": 4.5, "request_count": 7,
+            "tool_counts": {"Bash": 2}, "running_agents": 0,
+            "compact_count": 1, "periodic_count": 0,
+            "recent_calls": [{"name": "Bash", "summary": "ls -la"}],
+            "last_input": 900, "last_output": 100, "last_cache_read": 450,
+            "last_credits": 1.0,
+        }
+
+    def _inp(self):
+        return {
+            "model": {"display_name": "m"},
+            "cost": {"total_duration_ms": 65000, "total_api_duration_ms": 40000},
+            "context_window": {"used_percentage": 27, "context_window_size": 1000000,
+                              "current_usage": {"input_tokens": 265100}},
+        }
+
+    def _lines(self, inp=None, st=None):
+        out = build_statusline(inp or self._inp(), st or self._st())
+        plain = re.sub(r'\033\[[0-9;?]*[A-Za-z]', '', out)
+        return plain.split("\n")
+
+    def test_three_rows(self):
+        lines = self._lines()
+        self.assertEqual(len(lines), 3)
+
+    def test_row1_is_environment_and_context(self):
+        line = self._lines()[0]
+        self.assertIn("m", line)
+        self.assertIn("27%", line)
+        self.assertIn("1.0M", line)
+        self.assertIn("Compact×1", line)
+        self.assertIn("Time:1m5s", line)
+        self.assertIn("Credits:4.50", line)
+        self.assertLess(line.index("Time:"), line.index("Credits:"))
+        self.assertNotIn("In:", line)
+        self.assertNotIn("Tools:", line)
+
+    def test_row2_is_session_totals(self):
+        line = self._lines()[1]
+        self.assertIn("In:3.2K", line)
+        self.assertIn("Req:7", line)
+        self.assertIn("Recent: In:900 Out:100 Cache:50%", line)
+        self.assertIn("Avg:20.0t/s", line)
+        # Credits moved to line 1; requests lead the row.
+        self.assertNotIn("Credits:", line)
+        self.assertLess(line.index("Req:"), line.index("In:"))
+        self.assertLess(line.index("In:"), line.index("Recent:"))
+        self.assertLess(line.index("Recent:"), line.index("Avg:"))
+        self.assertNotIn("Tools:", line)
+
+    def test_row3_is_activity(self):
+        line = self._lines()[2]
+        self.assertIn("Tools:", line)
+        self.assertIn("Bash", line)
+
+    def test_recent_speed_only_when_rate_given(self):
+        # The recent rate is None until the second render with new output.
+        self.assertNotIn("Speed:", "\n".join(self._lines()))
+        with_rate = build_statusline(self._inp(), self._st(), 12.3)
+        plain = re.sub(r'\033\[[0-9;?]*[A-Za-z]', '', with_rate).split("\n")
+        self.assertIn("Speed:12.3t/s", plain[1])
+
+    def test_think_not_rendered(self):
+        self.assertNotIn("Think", "\n".join(self._lines()))
+
+    def test_cache_is_percentage_only(self):
+        text = "\n".join(self._lines())
+        self.assertIn("Cache:46%", text)
+        self.assertIn("Cache:50%", text)
+        self.assertNotIn("Cache:1.5K", text)
+
+    def test_context_hides_used_tokens(self):
+        line = self._lines()[0]
+        self.assertNotIn("265.1K", line)
+
+    def test_credits_not_duplicated_in_recent(self):
+        # Credits lives on line 1 only; the line-2 Recent block never repeats it.
+        text = "\n".join(self._lines())
+        self.assertEqual(text.count("Credits:"), 1)
+        self.assertIn("Credits:", text.split("\n")[0])
+
+    def test_multiline_summary_flattened(self):
+        out = format_recent_calls([{"name": "Bash", "summary": "a\nb\tc"}])
+        self.assertNotIn("\n", out)
+        self.assertIn("a b c", re.sub(r'\033\[[0-9;]*m', '', out))
+
+    def test_all_rows_fit_narrow_terminal(self):
+        st = self._st()
+        st["recent_calls"] = [
+            {"name": "Bash", "summary": "cmd-%d %s" % (i, "x" * 200)} for i in range(3)
+        ]
+        with mock.patch.dict(os.environ, {"COLUMNS": "100"}):
+            lines = self._lines(st=st)
+        for line in lines:
+            self.assertLessEqual(len(line), 100, line)
+        # Most recent calls survive (shrunk, or the oldest dropped if needed).
+        self.assertGreaterEqual(lines[2].count("cmd-"), 1)
+
+    def test_wide_terminal_keeps_three_calls(self):
+        st = self._st()
+        st["recent_calls"] = [
+            {"name": "Bash", "summary": "cmd-%d" % i} for i in range(3)
+        ]
+        with mock.patch.dict(os.environ, {"COLUMNS": "260"}):
+            lines = self._lines(st=st)
+        self.assertEqual(lines[2].count("cmd-"), 3)
 
 
 if __name__ == "__main__":

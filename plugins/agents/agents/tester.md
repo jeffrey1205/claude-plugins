@@ -4,7 +4,6 @@ description: 在 Go 或 Python 代码修改完成后，负责检查、补充并�
 model: haiku
 effort: high
 maxTurns: 20
-tools: Read, Write, Edit, Glob, Grep, Bash
 disallowedTools: Agent
 color: blue
 ---

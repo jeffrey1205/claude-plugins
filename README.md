@@ -39,6 +39,7 @@ codex plugin add docs@cc-hub
 /plugin install coder@cc-hub
 /plugin install docs@cc-hub
 /plugin install statusline@cc-hub
+/plugin install agents@cc-hub
 ```
 
 ## 插件列表
@@ -51,9 +52,9 @@ codex plugin add docs@cc-hub
 | [rtk](./plugins/rtk) | Hook | CLI 输出过滤工具，减少 LLM token 消耗（节省 60-90%） |
 | [statusline](./plugins/statusline) | Command + Script | 双宿主状态行（CodeBuddy Code / Claude Code）：上下文进度、Git、Token、请求数、Credits、Effort |
 | [docs](./plugins/docs) | Skill | 写作辅助 Skill：基于 283 万字语料统计的去 AI 味改写，白名单式规则只改命中文字 |
-| [agents](./plugins/agents) | Agent | Claude Code 专用开发 agent 集：worker 实施已确认计划的代码修改，tester 负责 Go/Python 测试 |
+| [agents](./plugins/agents) | Agent | 双宿主开发 agent 集（CodeBuddy Code / Claude Code）：worker 实施已确认计划的代码修改，tester 负责 Go/Python 测试 |
 
-> codegraph / golang-dev / coder / docs / statusline 同时支持 Claude Code 与 CodeBuddy；rtk / agents 仅支持 Claude Code。
+> codegraph / golang-dev / coder / docs / statusline / agents 同时支持 Claude Code 与 CodeBuddy；rtk 仅支持 Claude Code。
 
 
 ## 目录结构
@@ -128,6 +129,8 @@ codex plugin add docs@cc-hub
     ├── agents/
     │   ├── .claude-plugin/
     │   │   └── plugin.json   # 插件清单
+    │   ├── .codebuddy-plugin/
+    │   │   └── plugin.json   # CodeBuddy 插件清单
     │   └── agents/
     │       ├── worker.md     # 代码实施 agent
     │       └── tester.md     # 测试 agent

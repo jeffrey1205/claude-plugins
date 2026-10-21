@@ -1,8 +1,8 @@
 {
   "name": "statusline",
   "displayName": "Statusline",
-  "version": "2.0.0",
-  "description": "自适应终端宽度的三行状态行，同时支持 CodeBuddy Code 与 Claude Code：上下文进度、Git、Token、请求数、Credits、Effort",
+  "version": "2.0.1",
+  "description": "自适应终端宽度的三行状态行：上下文进度、Git、Token、请求数、Credits、Effort",
   "author": {
     "name": "Jeffrey"
   },
