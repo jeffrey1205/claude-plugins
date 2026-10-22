@@ -24,6 +24,7 @@ from render import (
     _render_cwd_git,
     _render_context_bar,
     _render_speed,
+    _merge_repeat_calls,
 )
 
 class TestFormatTools(unittest.TestCase):
@@ -722,6 +723,66 @@ class TestLineGrouping(unittest.TestCase):
         with mock.patch.dict(os.environ, {"COLUMNS": "260"}):
             lines = self._lines(st=st)
         self.assertEqual(lines[2].count("cmd-"), 3)
+
+    def test_merge_repeat_calls_collapses_adjacent(self):
+        calls = [{"name": "Bash", "summary": "git status"},
+                 {"name": "Bash", "summary": "git status"},
+                 {"name": "Bash", "summary": "ls"}]
+        merged = _merge_repeat_calls(calls)
+        self.assertEqual([c.get("count", 1) for c in merged], [2, 1])
+        self.assertEqual(merged[1]["summary"], "ls")
+
+    def test_merge_repeat_calls_keeps_non_adjacent(self):
+        calls = [{"name": "Bash", "summary": "a"},
+                 {"name": "Bash", "summary": "b"},
+                 {"name": "Bash", "summary": "a"}]
+        self.assertEqual(len(_merge_repeat_calls(calls)), 3)
+
+    def test_merge_repeat_calls_does_not_mutate_input(self):
+        calls = [{"name": "Bash", "summary": "a"},
+                 {"name": "Bash", "summary": "a"}]
+        _merge_repeat_calls(calls)
+        self.assertNotIn("count", calls[0])
+
+    def test_format_recent_calls_shows_repeat_count(self):
+        merged = _merge_repeat_calls(
+            [{"name": "Bash", "summary": "git status"}] * 3)
+        out = re.sub(r"\033\[[0-9;]*m", "", format_recent_calls(merged))
+        self.assertIn("×3", out)
+
+    def test_line3_tracks_line2_width_not_terminal(self):
+        # Even on a 260-column terminal the activity row stays roughly as
+        # wide as the totals row instead of stretching with the terminal.
+        st = self._st()
+        st["recent_calls"] = [
+            {"name": "Bash", "summary": "cmd-%d %s" % (i, "x" * 200)}
+            for i in range(3)]
+        with mock.patch.dict(os.environ, {"COLUMNS": "260"}):
+            lines = self._lines(st=st)
+        self.assertLessEqual(len(lines[2]), len(lines[1]) + 2)
+        self.assertGreaterEqual(lines[2].count("cmd-"), 1)
+
+    def test_repeated_calls_merge_and_free_budget(self):
+        st = self._st()
+        st["recent_calls"] = [
+            {"name": "Bash", "summary": "git status --short"}] * 3
+        with mock.patch.dict(os.environ, {"COLUMNS": "260"}):
+            lines = self._lines(st=st)
+        self.assertIn("×3", lines[2])
+        self.assertIn("git status --short", lines[2])
+        self.assertLessEqual(len(lines[2]), len(lines[1]) + 2)
+
+    def test_tiny_line2_still_shows_calls(self):
+        # Line 2 reduced to Req only: the parity cap falls below the floor,
+        # but the newest calls must not vanish.
+        with open(os.path.join(self._tmp, "config.json"), "w") as f:
+            json.dump({"layout": {"line1_hidden":
+                                  ["tokens", "recent", "speed"]}}, f)
+        st = self._st()
+        st["recent_calls"] = [{"name": "Bash", "summary": "cmd-%d" % i}
+                              for i in range(3)]
+        lines = self._lines(st=st)
+        self.assertGreaterEqual(lines[2].count("cmd-"), 2)
 
 
 if __name__ == "__main__":

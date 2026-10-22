@@ -23,8 +23,7 @@ stdin JSON ──▶ statusline.py (薄编排)
 | `formatting.py` | 颜色、token/时长格式化、进度条、宽度来源、ANSI/CJK 安全截断 |
 | `gitinfo.py` | git 分支/脏标记/ahead-behind |
 | `config.py` | `/statusline:config` 的后端（hide/show/move/enable/disable/reset/list） |
-| `cost-detail.py` | 按模型汇总 Token/Credits |
-| `setup-statusline.py` / `uninstall-statusline.py` | 写入/移除宿主 settings.json 的 statusLine |
+| `setup-statusline.py` | 写入宿主 settings.json 的 statusLine |
 | `tests/` | 单测 + fixtures（双宿主 transcript 与 stdin） |
 
 ## 不变量（改代码必读）
@@ -39,7 +38,7 @@ stdin JSON ──▶ statusline.py (薄编排)
 8. **`CACHE_VERSION` 必须随解析语义升级**：改 usage 提取、去重、计数口径都要 +1，否则旧缓存会以新语义读出错误数字。当前为 9。
 9. **宽度顺序**：stdin `terminal_width` → `COLUMNS`（Claude 官方要求）→ `/dev/tty` → Windows Console → 0（0 表示不截断）。不要把 `COLUMNS` 移到 `/dev/tty` 之后。
 10. **三行按类型分组**：LINE1_BLOCKS（环境+上下文+Time+Credits）→ 第一行，LINE2_BLOCKS（requests/tokens/recent/speed）→ 第二行，其余（Tools + 最近调用）→ 第三行。line1_order 只控制块顺序与显隐，不控制落在哪一行；新增块必须加进其中一个集合，否则不会渲染。`recent` 兼任块 id 与行开关：关闭时从顺序中移除该块，且第三行最近调用不渲染。
-11. **第三行宽度预算**：_recent_calls_layout() 先按终端宽度均分每条最近调用的长度（含工具名前缀），放不下才舍弃最旧的调用；不要在 format_recent_calls 里用固定 60 列，否则整行会被行级截断。
+11. **第三行宽度对齐第二行**：_recent_calls_layout() 的 `max_total` 传入第二行可见宽度，第三行基本与第二行同宽、不随终端宽度拉伸（第二行比工具段还窄时保底两条调用）。相邻重复调用先经 _merge_repeat_calls 合并为 `×N`（同名同 summary 才合并，拷贝副本不改缓存），再按预算均分每条长度；不要在 format_recent_calls 里用固定 60 列，否则整行会被行级截断。
 12. **不要重复展示同一信息**：context_bar 只显示百分比与上限（已用量在 tokens），Cache 只显示百分比（Token 数是 In 的子集），第二行的 Recent 块不再重复 Credits。
 13. **多行命令必须压平**：工具摘要里的换行/制表符会注入额外状态行，format_recent_calls 先 join(split()) 压成单行。
 14. **截断只能用 truncate_to_width**：len() 会切坏 CJK 与 ANSI；不要用连续空格做对齐（宿主会折叠）。

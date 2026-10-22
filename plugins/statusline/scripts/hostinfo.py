@@ -105,7 +105,7 @@ def newest_plugin_root(host):
     return os.path.join(root, names[-1])
 
 
-# --- settings.json helpers (shared by setup and uninstall) ------------------
+# --- settings.json helpers (used by setup) ----------------------------------
 
 def load_settings(path):
     """Read settings.json; {} when missing. Raises SystemExit on bad JSON."""

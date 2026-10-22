@@ -5,30 +5,37 @@ argument-hint: "<hide|show|move|enable|disable|reset|list> [args]"
 
 Invoke as `/statusline:config`. Adjust the statusline layout by running the
 `config.py` helper. The helper reads
-and writes `~/.codebuddy/plugins/data/statusline/config.json` atomically; changes
-take effect on the next statusline render (no restart needed).
+and writes `<config>/plugins/data/statusline/config.json` atomically (CodeBuddy:
+`~/.codebuddy/...`, Claude: `~/.claude/...`); changes take effect on the next
+statusline render (no restart needed).
 
-Translate the user's request into one of these commands and run it with Bash:
+Resolve the plugin root at the start of the Bash call (each call is a fresh
+shell, so the four lines must be repeated), then translate the user's request
+into one of these commands:
 
 ```bash
+ROOT="$CODEBUDDY_PLUGIN_ROOT"
+[ -n "$ROOT" ] || ROOT="$CLAUDE_PLUGIN_ROOT"
+[ -n "$ROOT" ] || ROOT=$(ls -d "$HOME"/.codebuddy/plugins/cache/cc-hub/statusline/*/ 2>/dev/null | sort -V | tail -1)
+[ -n "$ROOT" ] || ROOT=$(ls -d "$HOME"/.claude/plugins/cache/cc-hub/statusline/*/ 2>/dev/null | sort -V | tail -1)
+
 # Hide / show blocks (block-level)
-python3 ~/.codebuddy/statusline/config.py hide credits time
-python3 ~/.codebuddy/statusline/config.py show credits
+python3 "$ROOT/scripts/config.py" hide credits time
+python3 "$ROOT/scripts/config.py" show credits
 
 # Reorder blocks (the order applies within the row each block belongs to)
-python3 ~/.codebuddy/statusline/config.py move cost to front
-python3 ~/.codebuddy/statusline/config.py move tokens after model
-python3 ~/.codebuddy/statusline/config.py move requests to end
+python3 "$ROOT/scripts/config.py" move tokens after model
+python3 "$ROOT/scripts/config.py" move requests to end
 
 # Toggle whole lines (Tools / Recent)
-python3 ~/.codebuddy/statusline/config.py disable tools
-python3 ~/.codebuddy/statusline/config.py enable recent
+python3 "$ROOT/scripts/config.py" disable tools
+python3 "$ROOT/scripts/config.py" enable recent
 
 # Reset to defaults (deletes the config file)
-python3 ~/.codebuddy/statusline/config.py reset
+python3 "$ROOT/scripts/config.py" reset
 
 # Show the current effective layout
-python3 ~/.codebuddy/statusline/config.py list
+python3 "$ROOT/scripts/config.py" list
 ```
 
 Available blocks: `cwd_git`, `model`, `effort`, `context_bar`, `compact_periodic`,

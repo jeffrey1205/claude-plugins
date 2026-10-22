@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""setup-statusline.py / uninstall-statusline.py behaviour."""
+"""setup-statusline.py behaviour."""
 
 import json
 import os
@@ -11,7 +11,6 @@ import unittest
 
 PLUGIN_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 SETUP = os.path.join(PLUGIN_ROOT, 'scripts', 'setup-statusline.py')
-UNINSTALL = os.path.join(PLUGIN_ROOT, 'scripts', 'uninstall-statusline.py')
 
 
 class SetupTest(unittest.TestCase):
@@ -29,8 +28,8 @@ class SetupTest(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self._tmp, ignore_errors=True)
 
-    def _run(self, args, script=SETUP):
-        return subprocess.run([sys.executable, script] + args, env=self._env,
+    def _run(self, args):
+        return subprocess.run([sys.executable, SETUP] + args, env=self._env,
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                               universal_newlines=True, timeout=10)
 
@@ -118,23 +117,6 @@ class SetupTest(unittest.TestCase):
         result = self._run(['--host', 'codebuddy', '--plugin-root', self._tmp])
         self.assertEqual(result.returncode, 2)
         self.assertIn('cannot find', result.stderr)
-
-    def test_uninstall_removes_only_ours(self):
-        self._run(['--host', 'codebuddy', '--plugin-root', PLUGIN_ROOT])
-        result = self._run(['--host', 'codebuddy'], script=UNINSTALL)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertNotIn('statusLine', self._settings())
-
-    def test_uninstall_refuses_foreign(self):
-        self._write_settings({'statusLine': {'type': 'command', 'command': 'my-own.sh'}})
-        result = self._run(['--host', 'codebuddy'], script=UNINSTALL)
-        self.assertEqual(result.returncode, 2)
-        self.assertIn('statusLine', self._settings())
-
-    def test_uninstall_without_entry(self):
-        result = self._run(['--host', 'codebuddy'], script=UNINSTALL)
-        self.assertEqual(result.returncode, 0)
-        self.assertIn('no statusLine entry', result.stdout)
 
 
 if __name__ == '__main__':

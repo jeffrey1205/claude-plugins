@@ -14,7 +14,7 @@ import unittest.mock
 
 import stats
 from stats import CACHE_VERSION, new_stats, CACHE_DIR, load_cache, save_cache
-from parsing import add_line_to_stats, _extract_call_summary, parse_transcript_incremental as _parse_transcript_incremental
+from parsing import add_line_to_stats, _clean_call_hint, _extract_call_summary, parse_transcript_incremental as _parse_transcript_incremental
 
 
 def parse_transcript_incremental(transcript_path, session_id):
@@ -265,6 +265,44 @@ class TestExtractCallSummary(unittest.TestCase):
     def test_agent_from_arguments(self):
         result = _extract_call_summary("Agent", {"description": "Explore codebase for patterns"})
         self.assertEqual(result, "Explore codebase for patterns")
+
+class TestCleanCallHint(unittest.TestCase):
+    """Code-mode JS hints are reduced to their payload."""
+
+    def test_bash_wrapper(self):
+        self.assertEqual(
+            _clean_call_hint('const r = await Bash({ command: "git status" })'),
+            'git status')
+
+    def test_read_wrapper(self):
+        self.assertEqual(
+            _clean_call_hint('return await Read({ file_path: "/x/y.py" })'),
+            '/x/y.py')
+
+    def test_string_assignment(self):
+        self.assertEqual(_clean_call_hint("const P = '/home/x'"), '/home/x')
+
+    def test_escaped_quotes_unescaped(self):
+        self.assertEqual(
+            _clean_call_hint('Bash({ command: "echo \\"hi\\"" })'), 'echo "hi"')
+
+    def test_first_known_key_wins(self):
+        self.assertEqual(
+            _clean_call_hint('Glob({ pattern: "*.py", path: "/x" })'), '*.py')
+
+    def test_plain_hint_passthrough(self):
+        for hint in ('git status', 'ls -la /tmp', '', None):
+            self.assertEqual(_clean_call_hint(hint), hint)
+
+    def test_recent_calls_store_cleaned_hint(self):
+        entry = {'type': 'function_call', 'name': 'REPL',
+                 'arguments': '{}',
+                 'argumentsDisplayText':
+                     'const r = await Bash({ command: "git status" })'}
+        st = new_stats()
+        add_line_to_stats(st, entry)
+        self.assertEqual(st['recent_calls'][0]['summary'], 'git status')
+
 
 class TestIncrementalParsing(unittest.TestCase):
     def setUp(self):

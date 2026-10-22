@@ -11,6 +11,7 @@ lived in parse_transcript_incremental.
 
 import json
 import os
+import re
 import time
 
 import stats as stats_mod
@@ -27,6 +28,47 @@ from stats import (
     new_stats,
     save_cache,
 )
+
+
+# Code-mode hosts report a REPL call's argumentsDisplayText as raw JS
+# (const r = await Bash({ command: "..." })). The assignment prefix and the
+# wrapper call are noise that would eat the whole per-call budget on line 3,
+# so strip them and keep the payload. Plain-text hints (normal tools) match
+# none of these patterns and pass through untouched.
+_HINT_JS_ASSIGN_RE = re.compile(r'^\s*(?:const|let|var)\s+\w+\s*=\s*')
+_HINT_AWAIT_RE = re.compile(r'^\s*(?:return\s+)?await\s+')
+_HINT_CALL_RE = re.compile(r'^\s*(\w+)\s*\(\s*\{(.*)\}\s*\)\s*$')
+# Key names worth surfacing, most specific first so file_path wins over a
+# generic path in the same argument object.
+_HINT_ARG_RE = re.compile(
+    r'["\']?(command|file_path|pattern|query|url|description|path)["\']?'
+    r'\s*[:=]\s*["\']((?:[^"\'\\]|\\.)*)["\']')
+_HINT_STRING_RE = re.compile(r'^\s*["\'](.*)["\']\s*$')
+
+
+def _clean_call_hint(hint):
+    """Reduce a code-mode JS hint to the payload the user cares about.
+
+    const r = await Bash({ command: "git status" }) becomes git status,
+    return await Read({ file_path: "/x" }) becomes /x, and
+    const P = '/x' becomes /x. Returns hint unchanged when nothing matches
+    (plain command or path summaries from ordinary tools).
+    """
+    if not hint:
+        return hint
+    text = hint.strip()
+    text = _HINT_JS_ASSIGN_RE.sub('', text)
+    text = _HINT_AWAIT_RE.sub('', text)
+    call = _HINT_CALL_RE.match(text)
+    if call:
+        arg = _HINT_ARG_RE.search(call.group(2))
+        if arg:
+            return arg.group(2).replace('\\"', '"').replace("\\'", "'")
+        return text
+    literal = _HINT_STRING_RE.match(text)
+    if literal:
+        return literal.group(1)
+    return hint
 
 
 # Tool name -> argument key used to build its one-line call summary.
@@ -295,7 +337,7 @@ def add_line_to_stats(stats, data, state=None, is_main=True):
     """Parse a single JSONL entry and accumulate into stats.
 
     *state* carries the bounded dedup sets across invocations; pass None for
-    a one-off parse (tests, cost-detail), which is equivalent to a fresh
+    a one-off parse (tests), which is equivalent to a fresh
     session. *is_main* is False for sub-agent transcripts: those lines are
     all sidechain traffic, so the isSidechain skip must not apply.
     """
@@ -317,7 +359,8 @@ def add_line_to_stats(stats, data, state=None, is_main=True):
             _remember(state, 'agent_ids', call_id, AGENT_IDS_MAX)
         recent = stats["recent_calls"]
         recent.append({"name": name,
-                       "summary": hint or _extract_call_summary(name, args)})
+                       "summary": _clean_call_hint(hint)
+                       or _extract_call_summary(name, args)})
         if len(recent) > RECENT_CALLS_MAX:
             del recent[:-RECENT_CALLS_MAX]
 

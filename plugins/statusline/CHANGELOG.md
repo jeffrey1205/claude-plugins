@@ -45,6 +45,16 @@
 
 ## [Unreleased]
 
+### 移除 (Removed)
+
+- **`/statusline:cost-detail` 与 `/statusline:uninstall`**：移除两个命令及 `scripts/cost-detail.py`、`scripts/uninstall-statusline.py`。状态行数据在状态行本身已展示；卸载插件用 `/plugin` 面板，statusLine 配置也可手动从 settings.json 删除。
+
+### 变更 (Changed)
+
+- **第三行宽度对齐第二行**：`_recent_calls_layout` 新增 `max_total`（第二行可见宽度），第三行不再随终端宽度拉伸（260 列终端下从 237 列回落到与第二行持平），第二行比工具段还窄时保底两条调用。
+- **相邻重复调用合并**：`_merge_repeat_calls` 把相邻且 name+summary 完全相同的调用合并为一条并以 `×N` 展示（反复轮询如连续 `git status` 不再占三份预算），合并后每条预算更高；不改动缓存里的 stats 数据。
+- **code-mode hint 清洗**：`_clean_call_hint` 把 REPL 工具的 `argumentsDisplayText`（`const r = await Bash({ command: "..." })` 这类原始 JS）提取为有效内容（命令/路径/URL），普通工具的纯文本摘要不受影响。
+
 ### 新增 (Added)
 
 - **Time 块支持小时显示**：会话时长超过 1 小时时 `Time:` 从 `123m45s` 变为 `2h3m45s`，与分钟档风格一致。
@@ -66,6 +76,7 @@
 
 ### 修复 (Fixed)
 
+- **`/statusline:config`、`/statusline:cost-detail`、`/statusline:uninstall` 命令文档指向已不存在的 git-clone 路径**：三者的示例命令写的是 `~/.codebuddy/statusline/*.py`（2.0.0 改为市场安装后该目录不存在，其中 `uninstall.sh` 更是早已移除）。改为与 `/statusline:setup` 相同的 `$CODEBUDDY_PLUGIN_ROOT`/`$CLAUDE_PLUGIN_ROOT`（附插件缓存目录兜底）解析模式，并随插件缓存同步；顺带在 config.md 示例中去掉已移除的 `cost` 块、把 uninstall.md 改写为插件模式（`uninstall-statusline.py`，保留布局配置与缓存）。
 - **缓存命中高时会话上下文只显示总量**：`current_usage.input_tokens` 仅是最新请求中**未命中缓存**的输入部分，缓存写入/读取分别记在 `cache_creation_input_tokens`/`cache_read_input_tokens`。缓存命中高（如 88%）的会话里 `input_tokens` 可能为 0，此前 context_bar 只读它，导致已用部分被吞、只剩 `1.0M`。现在按官方 schema 将三段相加得到真实上下文长度（`input + cache_creation + cache_read`），恢复 `40.0K/1.0M`；三段全缺失但已知窗口大小与百分比时，仍按 `百分比 × 窗口大小` 兜底推导。
 - **Compact 检测适配新格式**：CodeBuddy 的 compact 事件格式变更，不再写入 `type: "summary", providerData.source: "pre-compact"`，改为 `type: "message", providerData.isCompactInternal=true + isSummary=true`。每次 compact 产生两条 message（摘要行 + "Please continue" 行），仅摘要行含 `isSummary=true`，避免重复计数。旧格式检测逻辑已移除。`Auto-Compact` 重命名为 `Compact`，因新格式下手动 `/compact` 同样被检测。CACHE_VERSION 升至 8。
 - **Compact/Periodic 计数在 compact 后首次调用时消失**：compact 后 `used_percentage` 可能为 null（CodeBuddy 尚未重算 context_window），而 Compact×N 和 Periodic×M 被嵌套在进度条条件分支内导致不渲染。修复为将两者移至条件分支外，始终显示。

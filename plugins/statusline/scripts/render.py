@@ -422,10 +422,34 @@ def format_tools(tool_counts, running_agents=0):
     return " | ".join(parts)
 
 
+def _merge_repeat_calls(calls):
+    """Collapse runs of identical consecutive calls (newest-first list).
+
+    Repeated polling (git status, ls) shows up as N identical entries that
+    spend the whole per-call budget saying the same thing. Adjacent entries
+    with the same name AND summary become one entry carrying its repeat
+    count, rendered by format_recent_calls with a ×N suffix. Entries are
+    copied so the cached stats dict is never mutated.
+    """
+    merged = []
+    for call in calls:
+        if merged:
+            prev = merged[-1]
+            if (prev.get('name') == call.get('name')
+                    and prev.get('summary') == call.get('summary')):
+                prev['count'] = prev.get('count', 1) + 1
+                continue
+        item = dict(call)
+        item['count'] = 1
+        merged.append(item)
+    return merged
+
+
 def format_recent_calls(recent_calls, max_entry_len=RECENT_CALLS_ENTRY_MAX):
     """Format the most recent function calls as line 3.
 
-    Each call shows: ToolName summary_text(truncated)
+    Each call shows: ToolName summary_text(truncated). A call repeated
+    back-to-back carries a ×N suffix (see _merge_repeat_calls).
     """
     if not recent_calls:
         return ""
@@ -435,18 +459,21 @@ def format_recent_calls(recent_calls, max_entry_len=RECENT_CALLS_ENTRY_MAX):
         name = call.get('name', '')
         summary = call.get('summary', '')
         short = TOOL_SHORT.get(name, name)
+        count = call.get('count', 1)
+        suffix = ' %s×%d%s' % (DIM, count, NC) if count > 1 else ''
         if summary and summary != name:
             # A multi-line command would inject extra rows into the statusline;
             # collapse all whitespace before truncating.
             summary = ' '.join(str(summary).split())
             # Truncate to max_summary visible columns (CJK-safe).
             # Previously used len() which miscounts wide characters and can
-            # split ANSI escape sequences.
-            room = max(6, max_entry_len - _visible_len(short) - 1)
+            # split ANSI escape sequences. The ×N suffix shares the budget.
+            room = max(6, max_entry_len - _visible_len(short) - 1
+                       - _visible_len(suffix))
             summary = truncate_to_width(summary, room)
-            parts.append(f"{CYAN}{short}{NC} {DIM}{summary}{NC}")
+            parts.append(f"{CYAN}{short}{NC} {DIM}{summary}{NC}{suffix}")
         else:
-            parts.append(f"{CYAN}{short}{NC}")
+            parts.append(f"{CYAN}{short}{NC}{suffix}")
     return " | ".join(parts)
 
 
@@ -461,13 +488,18 @@ LINE2_BLOCKS = frozenset(('requests', 'tokens', 'recent', 'speed'))
 
 
 
-def _recent_calls_layout(width, head_parts, count):
+def _recent_calls_layout(width, head_parts, count, max_total=None):
     """Return (how many recent calls to show, per-call summary budget).
 
     Recent calls used to be a fixed 60 columns each, which pushed line 3 far
     past the terminal and truncated the last call anyway. Here the remaining
     width is shared: all calls shrink together, and only when even the floor
     does not fit do we drop the oldest ones (newest-first is more useful).
+
+    *max_total* caps the whole row (the caller passes line 2's visible
+    width) so line 3 stays roughly as wide as the row above instead of
+    stretching with the terminal. A small floor keeps two calls visible
+    when line 2 is narrower than the tools segment.
     """
     if width <= 0 or count <= 0:
         return count, RECENT_CALLS_ENTRY_MAX
@@ -476,6 +508,9 @@ def _recent_calls_layout(width, head_parts, count):
     avail = (width - 2) - used - (3 if used else 0)
     if avail <= 0:
         return 0, 0
+    if max_total:
+        cap = max_total - used - (3 if used else 0)
+        avail = min(avail, max(cap, 2 * RECENT_CALLS_ENTRY_MIN + 3))
 
     per_call = (avail - 3 * (count - 1)) // count
     if per_call >= RECENT_CALLS_ENTRY_MIN:
@@ -532,16 +567,25 @@ def build_statusline(input_data, stats_dict, recent_rate=None):
                                 stats_dict.get('running_agents', 0))
         if tool_str:
             activity.append(f"{DIM}Tools:{NC} {tool_str}")
+    line2_str = ' | '.join(line2)
     if layout['recent']:
         calls = stats_dict.get('recent_calls') or []
         if calls:
-            shown, budget = _recent_calls_layout(width, activity, len(calls))
+            # Collapse back-to-back repeats first: fewer entries means
+            # more budget each, and ×N says the same thing in less space.
+            merged = _merge_repeat_calls(calls)
+            # Cap the row at line 2's width so line 3 never stretches with
+            # the terminal; the row above is the natural yardstick.
+            shown, budget = _recent_calls_layout(
+                width, activity, len(merged),
+                max_total=_visible_len(line2_str))
             # Keep the newest calls when the terminal is too narrow for all.
-            calls_str = format_recent_calls(calls[-shown:] if shown else [], budget)
+            calls_str = format_recent_calls(
+                merged[-shown:] if shown else [], budget)
             if calls_str:
                 activity.append(calls_str)
 
-    lines = [' | '.join(line1), ' | '.join(line2), ' | '.join(activity)]
+    lines = [' | '.join(line1), line2_str, ' | '.join(activity)]
     output = '\n'.join(line for line in lines if line)
 
     # Truncate each line to the terminal width so the renderer never wraps a

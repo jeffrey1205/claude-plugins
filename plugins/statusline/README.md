@@ -51,6 +51,7 @@ Tools: ✓ REPL×56 | ✓ TaskCreate×4 | ✓ TaskUpdate×2 | REPL await Task…
 | `speed` | 会话平均输出吞吐 `Avg:`（累计 Out ÷ 累计 API 时长；第二行末） |
 
 第三行 `Tools:` 按固定顺序统计工具调用次数，`Agent` 区分运行中（`↑`）与已完成（`✓`）；随后是最近 3 次工具调用摘要（CJK/ANSI 安全截断，多行命令压成一行）。
+相邻重复的调用（同名同摘要）会合并成一条并标注 `×N`，不再占多份宽度；整行宽度与第二行基本一致，不随终端宽度拉伸。
 宽度不够时先等比缩短每条调用摘要，仍放不下才舍弃最旧的调用，保证整行不折行、不被截断成半句。
 
 ## 双宿主字段支持
@@ -115,22 +116,6 @@ Tools: ✓ REPL×56 | ✓ TaskCreate×4 | ✓ TaskUpdate×2 | REPL await Task…
 - 布局配置是持久数据，留在 `<config>/plugins/data/statusline/config.json`。
 - 临时目录丢失只会触发一次全量重解析，不影响结果正确性；从旧路径（`/tmp/statusline-*`）升级后旧目录不自动迁移，可手动删除。
 
-## 详细报告
-
-```
-/statusline:cost-detail
-```
-
-按模型汇总 In / Out / Cache Read / Cache Write / Reasoning / Requests / Credits（为 0 的项省略），不输出货币金额。
-
-## 卸载
-
-```
-/statusline:uninstall     # 只删除 statusLine 配置，保留布局与缓存
-```
-
-卸载插件本身用 `/plugin` 面板。
-
 ## 从旧安装迁移
 
 1. **旧 git-clone 版**（`~/.codebuddy/statusline/`）：先跑 `bash ~/.codebuddy/statusline/uninstall.sh`，否则它的 `statusLine` 命令仍会优先生效；再按上面的方式安装插件并执行 `/statusline:setup`。
@@ -144,7 +129,7 @@ cd plugins/statusline
 python3 -m unittest discover -s scripts/tests -p 'test_*.py'
 ```
 
-覆盖：双宿主解析、增量与截断、去重（同 message id / 同 tool id）、isSidechain 防双计、宿主判定、setup/uninstall、宽度与 ANSI 安全截断。
+覆盖：双宿主解析、增量与截断、去重（同 message id / 同 tool id）、isSidechain 防双计、宿主判定、setup、宽度与 ANSI 安全截断。
 
 ## License
 
